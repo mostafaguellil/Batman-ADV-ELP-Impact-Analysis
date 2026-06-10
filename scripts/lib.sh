@@ -304,9 +304,15 @@ configure_batman_node() {
     ip link set dev ${MESH_IFACE} up
     ip link set dev bat0 up
 
-    echo 0 > /sys/class/net/bat0/mesh/bridge_loop_avoidance 2>/dev/null || true
-    echo 0 > /sys/class/net/bat0/mesh/ap_isolation 2>/dev/null || true
-    echo 1 > /sys/class/net/bat0/mesh/distributed_arp_table 2>/dev/null || true
+    batctl meshif bat0 bridge_loop_avoidance 0 2>/dev/null || true
+    batctl meshif bat0 ap_isolation 0 2>/dev/null || true
+    batctl meshif bat0 distributed_arp_table enable 2>/dev/null || true
+    for _k in bridge_loop_avoidance ap_isolation; do
+      _p=/sys/class/net/bat0/mesh/\${_k}
+      [[ -w \${_p} ]] && echo 0 > \${_p}
+    done
+    _d=/sys/class/net/bat0/mesh/distributed_arp_table
+    [[ -w \${_d} ]] && echo 1 > \${_d}
 
     ip -4 addr flush dev bat0
     ip addr add ${bat_ip} dev bat0
@@ -319,17 +325,19 @@ configure_batman_node() {
 }
 
 finalize_batman_mesh() {
-  local node
-  echo "==> Finalizing BATMAN data plane on all nodes"
+  local node quiet="${1:-0}"
+  [[ "${quiet}" -eq 1 ]] || echo "==> Finalizing BATMAN data plane on all nodes"
   for node in "${NODES[@]}"; do
     run_in_node "${node}" "
       sysctl -qw net.ipv4.conf.bat0.rp_filter=0 2>/dev/null || true
-      echo 1 > /sys/class/net/bat0/mesh/distributed_arp_table 2>/dev/null || true
-      ip link set bat0 up
+      batctl meshif bat0 distributed_arp_table enable 2>/dev/null || true
+      _d=/sys/class/net/bat0/mesh/distributed_arp_table
+      [[ -w \${_d} ]] && echo 1 > \${_d}
+      ip link set bat0 up 2>/dev/null || true
       ip neigh flush dev bat0 2>/dev/null || true
     " 2>/dev/null || true
   done
-  sleep 5
+  [[ "${quiet}" -eq 1 ]] || sleep 5
 }
 
 mesh_has_route() {
@@ -382,12 +390,12 @@ wait_for_mesh_convergence() {
   while [[ "${elapsed}" -lt "${timeout}" ]]; do
     n="$(count_neighbors "${observer}")"
     o="$(count_originators "${observer}")"
-    if [[ "${n}" -ge "${want}" ]] && mesh_routes_ready "${observer}"; then
-      echo "    Mesh ready: neighbors=${n} originators=${o} routes=OK (${elapsed}s)"
+    if [[ "${n}" -ge "${want}" ]] && { mesh_routes_ready "${observer}" || [[ "${o}" -ge "${want}" ]]; }; then
+      echo "    Mesh ready: neighbors=${n} originators=${o} routes=$(mesh_routes_ready "${observer}" && echo OK || echo pending) (${elapsed}s)"
       return 0
     fi
     if (( elapsed > 0 && elapsed % 10 == 0 )); then
-      finalize_batman_mesh
+      finalize_batman_mesh 1
       reconcile_batman_hardifs
     fi
     sleep 2
@@ -399,8 +407,8 @@ wait_for_mesh_convergence() {
   sleep 3
   n="$(count_neighbors "${observer}")"
   o="$(count_originators "${observer}")"
-  if [[ "${n}" -ge "${want}" ]] && mesh_routes_ready "${observer}"; then
-    echo "    Mesh ready after finalize: neighbors=${n} originators=${o} routes=OK"
+  if [[ "${n}" -ge "${want}" ]] && { mesh_routes_ready "${observer}" || [[ "${o}" -ge "${want}" ]]; }; then
+    echo "    Mesh ready after finalize: neighbors=${n} originators=${o}"
     return 0
   fi
   echo "WARNING: mesh not ready after ${timeout}s (neighbors=${n}, originators=${o}, routes=$(mesh_routes_ready "${observer}" && echo OK || echo missing))"
