@@ -73,6 +73,17 @@ Config : `scripts/lib.sh` (`NODE_COUNT=3`)
 
 **[docs/TRAVAIL.md](docs/TRAVAIL.md)**
 
+## Dépannage ping « Destination Host Unreachable »
+
+BATMAN exige **aucune IP sur `eth0`** (seulement sur `bat0`). Le setup flush maintenant `eth0` automatiquement.
+
+```bash
+sudo modprobe batman-adv
+./scripts/setup_batman.sh batman --skip-compose
+docker exec node1 bash -lc "batctl n"    # doit lister node2 et node3
+docker exec node1 bash -lc "ping -c 3 10.0.0.2"
+```
+
 ## Nettoyage
 
 ```bash

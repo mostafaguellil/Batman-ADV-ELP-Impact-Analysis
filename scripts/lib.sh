@@ -69,7 +69,7 @@ run_in_node() {
 }
 
 restore_batman_hardif() {
-  run_in_node "$1" "ip link set ${MESH_IFACE} up; batctl if add ${MESH_IFACE} 2>/dev/null || true"
+  run_in_node "$1" "ip link set ${MESH_IFACE} up; ip -4 addr flush dev ${MESH_IFACE}; batctl if add ${MESH_IFACE} 2>/dev/null || true"
 }
 
 mesh_disconnect() {
@@ -181,4 +181,65 @@ start_iperf_server() {
 
 stop_iperf_server() {
   run_in_node "${LAB_SERVER_NODE}" "pkill iperf3 >/dev/null 2>&1 || true" || true
+}
+
+# BATMAN-adv: no IP on hardif (eth0), only on bat0. Required for Docker bridge meshes.
+configure_batman_node() {
+  local node="$1"
+  local bat_ip="$2"
+
+  run_in_node "${node}" "
+    set -e
+    ip link set ${MESH_IFACE} up
+    ip -4 addr flush dev ${MESH_IFACE}
+    ip -6 addr flush dev ${MESH_IFACE} 2>/dev/null || true
+    ip link del dev bat0 2>/dev/null || true
+    ip link add name bat0 type batadv
+    batctl if del ${MESH_IFACE} 2>/dev/null || true
+    batctl if add ${MESH_IFACE}
+    ip link set up dev bat0
+    for key in bridge_loop_avoidance ap_isolation; do
+      echo 0 > /sys/class/net/bat0/mesh/\${key} 2>/dev/null || true
+    done
+    ip -4 addr flush dev bat0
+    ip addr add ${bat_ip} dev bat0
+  "
+}
+
+wait_for_mesh_convergence() {
+  local observer="${1:-${LAB_CLIENT_NODE}}"
+  local want="${2:-$((NODE_COUNT - 1))}"
+  local timeout="${3:-45}"
+  local elapsed=0 n
+
+  echo "==> Waiting for BATMAN mesh (expect >= ${want} neighbors on ${observer})"
+  while [[ "${elapsed}" -lt "${timeout}" ]]; do
+    n="$(count_neighbors "${observer}")"
+    if [[ "${n}" -ge "${want}" ]]; then
+      echo "    Mesh ready: ${n} neighbor(s) on ${observer} (${elapsed}s)"
+      return 0
+    fi
+    sleep 2
+    elapsed=$((elapsed + 2))
+  done
+
+  echo "WARNING: mesh not converged after ${timeout}s (neighbors=${n}, want>=${want})"
+  run_in_node "${observer}" "batctl n; batctl o" || true
+  return 1
+}
+
+show_mesh_diagnostics() {
+  local node="${1:-${LAB_CLIENT_NODE}}"
+  echo "==> Diagnostics on ${node}"
+  run_in_node "${node}" "
+    echo '--- batctl if ---'
+    batctl if 2>/dev/null || true
+    echo '--- batctl n ---'
+    batctl n 2>/dev/null || true
+    echo '--- batctl o ---'
+    batctl o 2>/dev/null || true
+    echo '--- ip addr ---'
+    ip -4 addr show dev ${MESH_IFACE}
+    ip -4 addr show dev bat0
+  "
 }

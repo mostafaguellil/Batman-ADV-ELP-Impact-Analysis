@@ -110,26 +110,20 @@ for pid in "${pids[@]}"; do
 done
 
 if [[ "${MODE}" == "batman" ]]; then
-  echo "==> Configuring BATMAN-Adv in each node"
+  echo "==> Configuring BATMAN-Adv in each node (no IP on ${UNDERLAY_IF}, only bat0)"
   for i in "${!NODES[@]}"; do
     node="${NODES[$i]}"
     bat_ip="${BAT_IPS[$i]}"
-
-    docker exec "${node}" bash -lc "
-      ip link set ${UNDERLAY_IF} up
-      ip link del dev bat0 2>/dev/null || true
-      ip link add name bat0 type batadv
-      batctl if add ${UNDERLAY_IF}
-      ip link set up dev bat0
-      ip addr flush dev bat0
-      ip addr add ${bat_ip} dev bat0
-    "
+    echo "    ${node} -> ${bat_ip}"
+    configure_batman_node "${node}" "${bat_ip}"
   done
+
+  wait_for_mesh_convergence "${LAB_CLIENT_NODE}" $((NODE_COUNT - 1)) 45 || true
 
   echo "==> BATMAN interfaces"
   for node in "${NODES[@]}"; do
     echo "--- ${node} ---"
-    docker exec "${node}" bash -lc "batctl if && ip -4 addr show bat0"
+    docker exec "${node}" bash -lc "batctl if && ip -4 addr show ${UNDERLAY_IF} && ip -4 addr show bat0"
   done
 else
   echo "==> Fallback mode enabled (no batman-adv module required)"
@@ -146,8 +140,13 @@ else
 fi
 
 echo "==> Connectivity test over ${MESH_SUBNET_PREFIX}.0/24 (${NODE_COUNT} nodes)"
-docker exec node1 bash -lc "ping -c 3 $(lab_server_ip)"
-docker exec node1 bash -lc "ping -c 3 $(lab_last_node_ip)"
+if ! docker exec node1 bash -lc "ping -c 3 -W 2 $(lab_server_ip)"; then
+  show_mesh_diagnostics node1
+  echo "ERROR: ping to $(lab_server_ip) failed."
+  echo "Hint: sudo modprobe batman-adv on host, then rerun ./scripts/setup_batman.sh batman --skip-compose"
+  exit 1
+fi
+docker exec node1 bash -lc "ping -c 3 -W 2 $(lab_last_node_ip)" || show_mesh_diagnostics node1
 
 echo "==> Optional: start iperf3 server on node2"
 echo "docker exec -d node2 bash -lc 'iperf3 -s'"
