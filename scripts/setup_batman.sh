@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# shellcheck source=scripts/lab_config.sh
-source "${ROOT}/scripts/lab_config.sh"
+# shellcheck source=scripts/lib.sh
+source "${ROOT}/scripts/lib.sh"
 
 UNDERLAY_IF="${MESH_IFACE}"
 OS_NAME="$(uname -s)"

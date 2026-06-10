@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${ROOT}"
 
-# shellcheck source=scripts/lab_config.sh
-source "${ROOT}/scripts/lab_config.sh"
+# shellcheck source=scripts/lib.sh
+source "${ROOT}/scripts/lib.sh"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "ERROR: docker not found."
