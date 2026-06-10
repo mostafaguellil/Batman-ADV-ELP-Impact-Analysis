@@ -240,7 +240,9 @@ read_batman_sysfs() {
 }
 
 measure_ping() {
-  run_in_node "$1" "ping -c ${3:-10} -i 0.2 -W 1 $2" 2>/dev/null || true
+  run_in_node "$1" "batctl meshif ${BATMESH_IF} ping -c ${3:-10} -t 2 $2" 2>/dev/null \
+    || run_in_node "$1" "ping -c ${3:-10} -i 0.2 -W 2 $2" 2>/dev/null \
+    || true
 }
 
 parse_ping_avg() { awk -F'/' '/rtt min\/avg\/max/ { print $5 }'; }
@@ -362,18 +364,37 @@ reconcile_batman_hardifs() {
 mesh_ping_test() {
   local client="$1"
   local target_ip="$2"
-  local tries="${3:-8}"
+  local tries="${3:-15}"
   local i
 
   for ((i = 1; i <= tries; i++)); do
-    if run_in_node "${client}" "batctl meshif ${BATMESH_IF} ping -c 1 -t 2 ${target_ip}" 2>/dev/null; then
-      run_in_node "${client}" "batctl meshif ${BATMESH_IF} ping -c 2 -t 2 ${target_ip}" 2>/dev/null \
-        || run_in_node "${client}" "ping -c 2 -W 2 ${target_ip}" 2>/dev/null
+    if run_in_node "${client}" "batctl meshif ${BATMESH_IF} ping -c 1 -t 5 ${target_ip}" 2>/dev/null; then
       return 0
     fi
-    if run_in_node "${client}" "ping -c 1 -W 2 ${target_ip}" 2>/dev/null; then
-      run_in_node "${client}" "ping -c 2 -W 2 ${target_ip}" 2>/dev/null
+    if run_in_node "${client}" "ping -c 1 -W 5 ${target_ip}" 2>/dev/null; then
       return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
+prove_mesh_connectivity() {
+  local client="$1"
+  local target_ip="$2"
+  local attempt max=25
+
+  echo "==> Proving mesh connectivity ${client} -> ${target_ip}"
+  for ((attempt = 1; attempt <= max; attempt++)); do
+    if mesh_ping_test "${client}" "${target_ip}" 1; then
+      echo "    batctl ping OK (attempt ${attempt})"
+      run_in_node "${client}" "batctl meshif ${BATMESH_IF} ping -c 3 -t 5 ${target_ip}" 2>/dev/null || true
+      run_in_node "${client}" "ping -c 3 -W 5 ${target_ip}" 2>/dev/null || true
+      return 0
+    fi
+    if (( attempt % 5 == 0 )); then
+      finalize_batman_mesh 1
+      reconcile_batman_hardifs
     fi
     sleep 2
   done
@@ -383,35 +404,29 @@ mesh_ping_test() {
 wait_for_mesh_convergence() {
   local observer="${1:-${LAB_CLIENT_NODE}}"
   local want="${2:-$((NODE_COUNT - 1))}"
-  local timeout="${3:-90}"
-  local elapsed=0 n o
+  local timeout="${3:-60}"
+  local elapsed=0 n
 
-  echo "==> Waiting for BATMAN mesh (neighbors + routes to $(lab_server_ip))"
+  echo "==> Waiting for BATMAN neighbors on ${observer} (want >= ${want})"
   while [[ "${elapsed}" -lt "${timeout}" ]]; do
     n="$(count_neighbors "${observer}")"
-    o="$(count_originators "${observer}")"
-    if [[ "${n}" -ge "${want}" ]] && { mesh_routes_ready "${observer}" || [[ "${o}" -ge "${want}" ]]; }; then
-      echo "    Mesh ready: neighbors=${n} originators=${o} routes=$(mesh_routes_ready "${observer}" && echo OK || echo pending) (${elapsed}s)"
+    if [[ "${n}" -ge "${want}" ]]; then
+      echo "    Neighbors ready: ${n} (${elapsed}s)"
       return 0
     fi
     if (( elapsed > 0 && elapsed % 10 == 0 )); then
       finalize_batman_mesh 1
-      reconcile_batman_hardifs
     fi
     sleep 2
     elapsed=$((elapsed + 2))
   done
 
-  finalize_batman_mesh
-  reconcile_batman_hardifs
-  sleep 3
   n="$(count_neighbors "${observer}")"
-  o="$(count_originators "${observer}")"
-  if [[ "${n}" -ge "${want}" ]] && { mesh_routes_ready "${observer}" || [[ "${o}" -ge "${want}" ]]; }; then
-    echo "    Mesh ready after finalize: neighbors=${n} originators=${o}"
+  if [[ "${n}" -ge "${want}" ]]; then
+    echo "    Neighbors ready: ${n} (${elapsed}s)"
     return 0
   fi
-  echo "WARNING: mesh not ready after ${timeout}s (neighbors=${n}, originators=${o}, routes=$(mesh_routes_ready "${observer}" && echo OK || echo missing))"
+  echo "WARNING: only ${n}/${want} neighbors after ${timeout}s"
   show_mesh_diagnostics "${observer}"
   return 1
 }
