@@ -29,7 +29,7 @@ Applications → bat0 (10.0.0.x) → BATMAN-Adv (OGM + ELP) → eth0 (bridge Doc
 
 ## 4. Environnement de test
 
-- **30 nœuds** `node1…node30` sur bridge `manet`
+- **10 nœuds** `node1…node10` sur bridge `manet`
 - **Client** `node1`, **serveur iperf** `node2`
 - Densité variable via `set_mesh_density()` dans `lib.sh`
 
@@ -45,7 +45,7 @@ cd Batman-ADV-ELP-Impact-Analysis
 ## 5. Méthodologie
 
 ### Benchmark densité
-Pour N = 5, 10, 15, 20, 25, 30 : convergence 45s, capture tcpdump 30s, ping, iperf3.
+Pour N = 3, 5, 7, 10 : convergence 30s, capture tcpdump 20s, ping, iperf3.
 
 ### Random walk
 Un nœud déconnecté/reconnecté à la fois ; métriques `during_disconnect` vs `after_reconnect`.
@@ -57,8 +57,10 @@ Un nœud déconnecté/reconnecté à la fois ; métriques `during_disconnect` vs
 
 | Densité | PPS | Voisins | Latence (ms) | Débit (Mbit/s) |
 |---------|-----|---------|--------------|----------------|
+| 3 | | | | |
 | 5 | | | | |
-| 30 | | | | |
+| 7 | | | | |
+| 10 | | | | |
 
 Fichiers : `results/density_*.csv`, `results/random_walk_*.csv`
 

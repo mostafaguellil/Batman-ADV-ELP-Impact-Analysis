@@ -137,7 +137,7 @@ fi
 
 echo "==> Connectivity test over ${MESH_SUBNET_PREFIX}.0/24 (${NODE_COUNT} nodes)"
 docker exec node1 bash -lc "ping -c 3 $(lab_server_ip)"
-docker exec node1 bash -lc "ping -c 3 ${MESH_SUBNET_PREFIX}.15"
+docker exec node1 bash -lc "ping -c 3 ${MESH_SUBNET_PREFIX}.5"
 docker exec node1 bash -lc "ping -c 3 $(lab_last_node_ip)"
 
 echo "==> Optional: start iperf3 server on node2"

@@ -1,6 +1,6 @@
 # BATMAN-Adv ELP Impact Analysis
 
-Simulation MANET Docker (30 nœuds) pour analyser le trafic ELP/BATMAN et son impact sur débit et latence.
+Simulation MANET Docker (**10 nœuds**) pour analyser le trafic ELP/BATMAN et son impact sur débit et latence.
 
 ## Cloner le projet
 
@@ -12,8 +12,8 @@ cd Batman-ADV-ELP-Impact-Analysis
 ## Démarrage
 
 ```bash
-./scripts/start_lab.sh          # lance les 30 nœuds + configure bat0
-./scripts/run_study.sh          # étude complète automatisée
+./scripts/start_lab.sh          # lance les 10 nœuds + configure bat0
+./scripts/run_study.sh            # étude complète (plus rapide qu’avec 30 nœuds)
 ```
 
 ## Scripts
@@ -23,29 +23,23 @@ cd Batman-ADV-ELP-Impact-Analysis
 | `start_lab.sh` | Démarre Docker + configure BATMAN-Adv |
 | `setup_batman.sh` | Setup manuel (`auto` / `batman` / `fallback`) |
 | `run_study.sh` | Benchmark densité + random walk + analyse |
-| `density_benchmark.sh` | Mesures ELP/BATMAN par densité (5→30) |
+| `density_benchmark.sh` | Mesures ELP/BATMAN par densité (3→10) |
 | `random_walk.sh` | Churn aléatoire disconnect/reconnect + CSV |
 | `summarize_results.sh` | Résumé des CSV dans `results/` |
 | `observe_batman.sh` | Observer `batctl n/o` et trafic `0x4305` |
 | `fault.sh` | Fautes manuelles (disconnect, netem) |
 
-Bibliothèque partagée : `scripts/lib.sh`
+Bibliothèque partagée : `scripts/lib.sh` (`NODE_COUNT=10`)
 
 ## Observer BATMAN
 
 ```bash
-./scripts/observe_batman.sh node1 all        # état complet
-./scripts/observe_batman.sh node1 neighbors # table ELP
-./scripts/observe_batman.sh node1 routes     # table OGM
-./scripts/observe_batman.sh node1 traffic 30 # trames contrôle
-./scripts/observe_batman.sh node1 watch      # live (3s)
+./scripts/observe_batman.sh node1 all
+./scripts/observe_batman.sh node1 neighbors
+./scripts/observe_batman.sh node1 routes
+./scripts/observe_batman.sh node1 traffic 30
+./scripts/observe_batman.sh node1 watch
 ```
-
-| Commande | Signification |
-|----------|---------------|
-| `batctl n` | Voisins ELP (1 saut) |
-| `batctl o` | Routes OGM (originateurs) |
-| `tcpdump … 0x4305` | Trafic contrôle BATMAN sur `eth0` |
 
 ## Fautes manuelles
 
@@ -63,10 +57,13 @@ Bibliothèque partagée : `scripts/lib.sh`
 
 ## Rapport
 
-Structure du rapport : **[docs/TRAVAIL.md](docs/TRAVAIL.md)**
+**[docs/TRAVAIL.md](docs/TRAVAIL.md)**
 
 ## Nettoyage
 
 ```bash
 docker compose down
+# supprimer d’anciens conteneurs node11..node30 si encore présents :
+docker rm -f node11 node12 node13 node14 node15 node16 node17 node18 node19 node20 \
+  node21 node22 node23 node24 node25 node26 node27 node28 node29 node30 2>/dev/null || true
 ```

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Shared config, fault injection, and BATMAN/ELP metrics.
 
-NODE_COUNT=30
+NODE_COUNT=10
 MESH_SUBNET_PREFIX="10.0.0"
 MESH_IFACE="eth0"
 BATMAN_ETHERTYPE="0x4305"
