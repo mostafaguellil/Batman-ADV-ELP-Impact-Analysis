@@ -2,6 +2,13 @@
 
 Simulation MANET Docker (30 nœuds) pour analyser le trafic ELP/BATMAN et son impact sur débit et latence.
 
+## Cloner le projet
+
+```bash
+git clone https://github.com/mostafaguellil/Batman-ADV-ELP-Impact-Analysis.git
+cd Batman-ADV-ELP-Impact-Analysis
+```
+
 ## Démarrage
 
 ```bash

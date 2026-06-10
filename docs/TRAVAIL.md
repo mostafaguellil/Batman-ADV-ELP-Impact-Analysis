@@ -33,7 +33,11 @@ Applications → bat0 (10.0.0.x) → BATMAN-Adv (OGM + ELP) → eth0 (bridge Doc
 - **Client** `node1`, **serveur iperf** `node2`
 - Densité variable via `set_mesh_density()` dans `lib.sh`
 
+### Installation
+
 ```bash
+git clone https://github.com/mostafaguellil/Batman-ADV-ELP-Impact-Analysis.git
+cd Batman-ADV-ELP-Impact-Analysis
 ./scripts/start_lab.sh
 ./scripts/run_study.sh
 ```
