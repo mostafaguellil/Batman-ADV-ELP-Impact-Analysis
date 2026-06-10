@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${ROOT}"
 
+# shellcheck source=scripts/lab_config.sh
+source "${ROOT}/scripts/lab_config.sh"
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "ERROR: docker not found."
   exit 1
@@ -19,13 +22,8 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "==> Starting full stack (nodes + metrics + Grafana + InfluxDB)…"
-if docker compose up -d --help 2>/dev/null | grep -q -- '--wait'; then
-  docker compose up -d --wait
-else
-  echo "NOTE: 'docker compose up --wait' not available; starting without wait."
-  docker compose up -d
-fi
+echo "==> Starting MANET nodes (${NODE_COUNT} containers)…"
+docker compose up -d
 
 echo "==> Configuring MANET node tools and overlay IPs (see setup_batman.sh)…"
 "${ROOT}/scripts/setup_batman.sh" auto --skip-compose
@@ -38,12 +36,7 @@ else
 fi
 
 echo ""
-echo "Lab is ready."
-echo "  Grafana     http://localhost:3000   (admin / admin)"
-echo "  Prometheus  http://localhost:9090"
-echo "  InfluxDB    http://localhost:8086   (admin / adminadmin)"
-echo "  cAdvisor    http://localhost:8080"
-echo "  Dashboards  Grafana → MANET → MANET Overview"
+echo "Lab is ready (${NODE_COUNT} MANET nodes on ${MESH_SUBNET_PREFIX}.0/24)."
 echo ""
 echo "Quick checks:"
 echo "  docker exec node1 bash -lc \"ping -c 3 10.0.0.2\""

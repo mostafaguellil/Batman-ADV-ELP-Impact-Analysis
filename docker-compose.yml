@@ -1,246 +1,135 @@
+x-batman-node: &batman-node
+  image: ubuntu:22.04
+  privileged: true
+  cap_add:
+    - NET_ADMIN
+    - SYS_MODULE
+  networks:
+    - manet
+  command: ["bash", "-c", "sleep infinity"]
+
 services:
   node1:
-    image: ubuntu:22.04
+    <<: *batman-node
     container_name: node1
     hostname: node1
-    privileged: true
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    networks:
-      - manet
-    command: ["bash", "-c", "sleep infinity"]
-
   node2:
-    image: ubuntu:22.04
+    <<: *batman-node
     container_name: node2
     hostname: node2
-    privileged: true
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    networks:
-      - manet
-    command: ["bash", "-c", "sleep infinity"]
-
   node3:
-    image: ubuntu:22.04
+    <<: *batman-node
     container_name: node3
     hostname: node3
-    privileged: true
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    networks:
-      - manet
-    command: ["bash", "-c", "sleep infinity"]
-
   node4:
-    image: ubuntu:22.04
+    <<: *batman-node
     container_name: node4
     hostname: node4
-    privileged: true
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    networks:
-      - manet
-    command: ["bash", "-c", "sleep infinity"]
-
   node5:
-    image: ubuntu:22.04
+    <<: *batman-node
     container_name: node5
     hostname: node5
-    privileged: true
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    networks:
-      - manet
-    command: ["bash", "-c", "sleep infinity"]
-
   node6:
-    image: ubuntu:22.04
+    <<: *batman-node
     container_name: node6
     hostname: node6
-    privileged: true
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    networks:
-      - manet
-    command: ["bash", "-c", "sleep infinity"]
-
   node7:
-    image: ubuntu:22.04
+    <<: *batman-node
     container_name: node7
     hostname: node7
-    privileged: true
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    networks:
-      - manet
-    command: ["bash", "-c", "sleep infinity"]
-
   node8:
-    image: ubuntu:22.04
+    <<: *batman-node
     container_name: node8
     hostname: node8
-    privileged: true
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    networks:
-      - manet
-    command: ["bash", "-c", "sleep infinity"]
-
   node9:
-    image: ubuntu:22.04
+    <<: *batman-node
     container_name: node9
     hostname: node9
-    privileged: true
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    networks:
-      - manet
-    command: ["bash", "-c", "sleep infinity"]
-
   node10:
-    image: ubuntu:22.04
+    <<: *batman-node
     container_name: node10
     hostname: node10
-    privileged: true
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    networks:
-      - manet
-    command: ["bash", "-c", "sleep infinity"]
-
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.49.1
-    container_name: cadvisor
-    privileged: true
-    # Expose Docker Compose labels (e.g. com.docker.compose.service) on Prometheus metrics,
-    # so Grafana can filter node1/node2/node3 instead of cgroup IDs only.
-    command:
-      - --store_container_labels=true
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8080/metrics >/dev/null || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-      start_period: 30s
-    ports:
-      - "8080:8080"
-    volumes:
-      - /:/rootfs:ro
-      # Mount only the Docker socket (not all of /var/run) so cAdvisor can resolve containers on Docker Desktop.
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /sys:/sys:ro
-      - /var/lib/docker:/var/lib/docker:ro
-      - /dev/disk:/dev/disk:ro
-    devices:
-      - /dev/kmsg
-    networks:
-      - manet
-
-  prometheus:
-    image: prom/prometheus:v2.55.1
-    container_name: prometheus
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:9090/-/healthy >/dev/null || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-      start_period: 15s
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.path=/prometheus"
-    depends_on:
-      cadvisor:
-        condition: service_healthy
-    networks:
-      - manet
-
-  influxdb:
-    image: influxdb:2.7
-    container_name: influxdb
-    ports:
-      - "8086:8086"
-    volumes:
-      - influxdb-data:/var/lib/influxdb2
-    environment:
-      DOCKER_INFLUXDB_INIT_MODE: setup
-      DOCKER_INFLUXDB_INIT_USERNAME: admin
-      DOCKER_INFLUXDB_INIT_PASSWORD: adminadmin
-      DOCKER_INFLUXDB_INIT_ORG: manet
-      DOCKER_INFLUXDB_INIT_BUCKET: metrics
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: manet-dev-admin-token-change-me
-    healthcheck:
-      test: ["CMD", "influx", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 12
-      start_period: 40s
-    networks:
-      - manet
-
-  telegraf:
-    image: telegraf:1.31-alpine
-    container_name: telegraf
-    environment:
-      INFLUX_TOKEN: manet-dev-admin-token-change-me
-    volumes:
-      - ./monitoring/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
-    depends_on:
-      cadvisor:
-        condition: service_healthy
-      prometheus:
-        condition: service_healthy
-      influxdb:
-        condition: service_healthy
-    networks:
-      - manet
-
-  grafana:
-    image: grafana/grafana:11.2.2
-    container_name: grafana
-    ports:
-      - "3000:3000"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:3000/api/health >/dev/null || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 8
-      start_period: 30s
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
-      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
-    depends_on:
-      prometheus:
-        condition: service_healthy
-      influxdb:
-        condition: service_healthy
-    networks:
-      - manet
+  node11:
+    <<: *batman-node
+    container_name: node11
+    hostname: node11
+  node12:
+    <<: *batman-node
+    container_name: node12
+    hostname: node12
+  node13:
+    <<: *batman-node
+    container_name: node13
+    hostname: node13
+  node14:
+    <<: *batman-node
+    container_name: node14
+    hostname: node14
+  node15:
+    <<: *batman-node
+    container_name: node15
+    hostname: node15
+  node16:
+    <<: *batman-node
+    container_name: node16
+    hostname: node16
+  node17:
+    <<: *batman-node
+    container_name: node17
+    hostname: node17
+  node18:
+    <<: *batman-node
+    container_name: node18
+    hostname: node18
+  node19:
+    <<: *batman-node
+    container_name: node19
+    hostname: node19
+  node20:
+    <<: *batman-node
+    container_name: node20
+    hostname: node20
+  node21:
+    <<: *batman-node
+    container_name: node21
+    hostname: node21
+  node22:
+    <<: *batman-node
+    container_name: node22
+    hostname: node22
+  node23:
+    <<: *batman-node
+    container_name: node23
+    hostname: node23
+  node24:
+    <<: *batman-node
+    container_name: node24
+    hostname: node24
+  node25:
+    <<: *batman-node
+    container_name: node25
+    hostname: node25
+  node26:
+    <<: *batman-node
+    container_name: node26
+    hostname: node26
+  node27:
+    <<: *batman-node
+    container_name: node27
+    hostname: node27
+  node28:
+    <<: *batman-node
+    container_name: node28
+    hostname: node28
+  node29:
+    <<: *batman-node
+    container_name: node29
+    hostname: node29
+  node30:
+    <<: *batman-node
+    container_name: node30
+    hostname: node30
 
 networks:
   manet:
     driver: bridge
-
-volumes:
-  grafana-data:
-  influxdb-data:

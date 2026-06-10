@@ -1,20 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-NODES=(node1 node2 node3 node4 node5 node6 node7 node8 node9 node10)
-BAT_IPS=(
-  10.0.0.1/24
-  10.0.0.2/24
-  10.0.0.3/24
-  10.0.0.4/24
-  10.0.0.5/24
-  10.0.0.6/24
-  10.0.0.7/24
-  10.0.0.8/24
-  10.0.0.9/24
-  10.0.0.10/24
-)
-UNDERLAY_IF="eth0"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/lab_config.sh
+source "${ROOT}/scripts/lab_config.sh"
+
+UNDERLAY_IF="${MESH_IFACE}"
 OS_NAME="$(uname -s)"
 SKIP_COMPOSE=0
 POSITIONAL=()
@@ -144,10 +135,10 @@ else
   done
 fi
 
-echo "==> Connectivity test over 10.0.0.0/24"
-docker exec node1 bash -lc "ping -c 3 10.0.0.2"
-docker exec node1 bash -lc "ping -c 3 10.0.0.3"
-docker exec node1 bash -lc "ping -c 3 10.0.0.10"
+echo "==> Connectivity test over ${MESH_SUBNET_PREFIX}.0/24 (${NODE_COUNT} nodes)"
+docker exec node1 bash -lc "ping -c 3 $(lab_server_ip)"
+docker exec node1 bash -lc "ping -c 3 ${MESH_SUBNET_PREFIX}.15"
+docker exec node1 bash -lc "ping -c 3 $(lab_last_node_ip)"
 
 echo "==> Optional: start iperf3 server on node2"
 echo "docker exec -d node2 bash -lc 'iperf3 -s'"
