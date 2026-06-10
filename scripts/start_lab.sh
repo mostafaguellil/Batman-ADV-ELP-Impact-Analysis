@@ -17,26 +17,23 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 
 if ! docker info >/dev/null 2>&1; then
-  echo "ERROR: Cannot connect to Docker daemon. Start Docker Desktop/Engine, then retry."
+  echo "ERROR: Cannot connect to Docker daemon. Start Docker Engine, then retry."
   exit 1
 fi
 
-echo "==> Starting MANET nodes (${NODE_COUNT} containers)…"
+if [[ "$(uname -s)" == "Linux" ]]; then
+  preflight_ubuntu_batman
+fi
+
+echo "==> Starting MANET nodes (${NODE_COUNT} containers on macvlan/${MANET_PARENT_IF})…"
 docker compose up -d
 
-echo "==> Configuring MANET (BATMAN first, fallback if mesh fails)…"
+echo "==> Configuring BATMAN-Adv mesh…"
 if [[ "$(uname -s)" == "Linux" ]]; then
-  ensure_host_batman_prereqs || true
   tune_manet_bridge || true
 fi
 
-if ! "${ROOT}/scripts/setup_batman.sh" batman --skip-compose; then
-  echo ""
-  echo "WARNING: BATMAN setup failed — switching to fallback mode (IPs on eth0)."
-  echo "         Real BATMAN/ELP metrics will NOT be available."
-  echo "         Run ./scripts/debug_mesh.sh to troubleshoot."
-  "${ROOT}/scripts/setup_batman.sh" fallback --skip-compose
-fi
+"${ROOT}/scripts/setup_batman.sh" batman --skip-compose
 
 echo "==> Starting iperf3 server on node2 (port 5201)…"
 if docker exec node2 bash -lc "ss -ltn 2>/dev/null | grep -q ':5201 '"; then
@@ -46,9 +43,9 @@ else
 fi
 
 echo ""
-echo "Lab is ready (${NODE_COUNT} MANET nodes on ${MESH_SUBNET_PREFIX}.0/24)."
+echo "Lab is ready — real BATMAN mesh on ${MESH_SUBNET_PREFIX}.0/24"
 echo ""
-echo "Quick checks:"
+echo "Verify:"
+echo "  docker exec node1 bash -lc \"batctl -m bat0 n\""
 echo "  docker exec node1 bash -lc \"ping -c 3 10.0.0.2\""
 echo "  ./scripts/observe_batman.sh node1 all"
-echo "  ./scripts/debug_mesh.sh"

@@ -59,6 +59,9 @@ if [[ "${MODE}" == "auto" ]]; then
 fi
 
 if [[ "${SKIP_COMPOSE}" -eq 0 ]]; then
+  if [[ "$(uname -s)" == "Linux" ]]; then
+    preflight_ubuntu_batman
+  fi
   echo "==> Starting containers"
   for node in "${NODES[@]}"; do
     if docker container inspect "${node}" >/dev/null 2>&1; then
@@ -123,7 +126,7 @@ if [[ "${MODE}" == "batman" ]]; then
   done
 
   MESH_OK=1
-  wait_for_mesh_convergence "${LAB_CLIENT_NODE}" $((NODE_COUNT - 1)) 60 || MESH_OK=0
+  wait_for_mesh_convergence "${LAB_CLIENT_NODE}" $((NODE_COUNT - 1)) 90 || MESH_OK=0
 
   echo "==> BATMAN interfaces"
   for node in "${NODES[@]}"; do
@@ -148,8 +151,16 @@ echo "==> Connectivity test over ${MESH_SUBNET_PREFIX}.0/24 (${NODE_COUNT} nodes
 if [[ "${MODE}" == "batman" ]]; then
   if ! mesh_ping_test "${LAB_CLIENT_NODE}" "$(lab_server_ip)" 3; then
     show_mesh_diagnostics "${LAB_CLIENT_NODE}"
+    echo ""
     echo "ERROR: BATMAN mesh ping failed."
     echo "Run: ./scripts/debug_mesh.sh"
+    echo ""
+    echo "Ubuntu checklist:"
+    echo "  sudo apt install linux-modules-extra-\$(uname -r) batctl"
+    echo "  sudo modprobe batman-adv"
+    echo "  docker compose down && ./scripts/start_lab.sh"
+    echo ""
+    echo "VMware/VirtualBox: enable Promiscuous Mode on the VM network adapter."
     exit 1
   fi
   mesh_ping_test "${LAB_CLIENT_NODE}" "$(lab_last_node_ip)" 3 || show_mesh_diagnostics "${LAB_CLIENT_NODE}"

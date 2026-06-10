@@ -47,21 +47,21 @@ for node in "${NODES[@]}"; do
 done
 
 echo ""
-echo "----- Docker bridge (manet) -----"
+echo "----- Docker network (manet) -----"
 init_network 2>/dev/null || true
 if [[ -n "${MESH_NETWORK:-}" ]]; then
-  net_id="$(docker network inspect "${MESH_NETWORK}" --format '{{.Id}}' 2>/dev/null || true)"
-  br_if="br-${net_id:0:12}"
-  if [[ -d "/sys/class/net/${br_if}/bridge" ]]; then
-    echo "  bridge=${br_if}"
-    for key in multicast_snooping multicast_querier; do
-      val="$(cat "/sys/class/net/${br_if}/bridge/${key}" 2>/dev/null || echo '?')"
-      echo "  ${key}=${val} (want 0 for BATMAN OGMs)"
-    done
-  else
-    echo "  bridge ${br_if} not found on host"
+  driver="$(docker network inspect "${MESH_NETWORK}" --format '{{.Driver}}' 2>/dev/null || echo '?')"
+  parent="$(docker network inspect "${MESH_NETWORK}" --format '{{index .Options "parent"}}' 2>/dev/null || echo '?')"
+  echo "  driver=${driver} parent=${parent}"
+  if [[ "${driver}" == "bridge" ]]; then
+    net_id="$(docker network inspect "${MESH_NETWORK}" --format '{{.Id}}' 2>/dev/null || true)"
+    br_if="br-${net_id:0:12}"
+    if [[ -d "/sys/class/net/${br_if}/bridge" ]]; then
+      echo "  bridge=${br_if} multicast_snooping=$(cat "/sys/class/net/${br_if}/bridge/multicast_snooping" 2>/dev/null || echo '?')"
+    fi
   fi
 fi
+ip link show "${MANET_PARENT_IF}" 2>/dev/null || echo "  ${MANET_PARENT_IF}: not found (run ./scripts/start_lab.sh)"
 
 echo ""
 echo "----- Quick test from node1 -----"

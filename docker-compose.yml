@@ -29,7 +29,10 @@ services:
 
 networks:
   manet:
-    driver: bridge
+    driver: macvlan
     driver_opts:
-      com.docker.network.bridge.enable_icc: "true"
-      com.docker.network.bridge.enable_ip_masquerade: "false"
+      parent: manet0
+      macvlan_mode: bridge
+    ipam:
+      config:
+        - subnet: 172.30.255.0/24
