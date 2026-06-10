@@ -294,10 +294,13 @@ configure_batman_node() {
     ip link set dev ${MESH_IFACE} promisc on
 
     ip link del bat0 2>/dev/null || true
-    ip link add name bat0 type batadv mtu 1500
+    ip link add name bat0 type batadv
+    ip link set dev bat0 mtu 1500 2>/dev/null || true
 
     batctl meshif bat0 interface del ${MESH_IFACE} 2>/dev/null || true
-    ip link set dev ${MESH_IFACE} master bat0
+    if ! ip link set dev ${MESH_IFACE} master bat0 2>/dev/null; then
+      batctl meshif bat0 interface add -M ${MESH_IFACE}
+    fi
     ip link set dev ${MESH_IFACE} up
     ip link set dev bat0 up
 
