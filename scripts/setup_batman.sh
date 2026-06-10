@@ -117,6 +117,8 @@ if [[ "${MODE}" == "batman" ]]; then
     configure_batman_node "${node}" "${bat_ip}"
   done
 
+  finalize_batman_mesh
+
   MESH_OK=1
   wait_for_mesh_convergence "${LAB_CLIENT_NODE}" $((NODE_COUNT - 1)) 90 || MESH_OK=0
 

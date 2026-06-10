@@ -79,7 +79,8 @@ restore_batman_hardif() {
     ip link set dev ${MESH_IFACE} promisc on 2>/dev/null || true
     ip -4 addr flush dev ${MESH_IFACE}
     if ip link show bat0 >/dev/null 2>&1; then
-      batctl meshif bat0 interface add -M ${MESH_IFACE} 2>/dev/null || true
+      ip link set dev ${MESH_IFACE} master bat0 2>/dev/null || \
+        batctl meshif bat0 interface add -M ${MESH_IFACE} 2>/dev/null || true
       ip link set ${MESH_IFACE} up
     fi
   "
@@ -277,7 +278,7 @@ stop_iperf_server() {
   run_in_node "${LAB_SERVER_NODE}" "pkill iperf3 >/dev/null 2>&1 || true" || true
 }
 
-# BATMAN-adv: attach eth0 to bat0 first, assign IP on bat0, then flush eth0.
+# BATMAN-adv: kernel attaches eth0 under bat0; IP only on bat0.
 configure_batman_node() {
   local node="$1"
   local bat_ip="$2"
@@ -285,23 +286,24 @@ configure_batman_node() {
   run_in_node "${node}" "
     set -e
     modprobe batman-adv 2>/dev/null || true
-    sysctl -qw net.ipv4.conf.all.rp_filter=0
-    sysctl -qw net.ipv4.conf.default.rp_filter=0
-    sysctl -qw net.ipv4.conf.${MESH_IFACE}.rp_filter=0
+    for dev in all default ${MESH_IFACE} bat0; do
+      sysctl -qw net.ipv4.conf.\${dev}.rp_filter=0 2>/dev/null || true
+    done
 
     ip link set ${MESH_IFACE} up
     ip link set dev ${MESH_IFACE} promisc on
 
     ip link del bat0 2>/dev/null || true
-    ip link add name bat0 type batadv
+    ip link add name bat0 type batadv mtu 1500
 
     batctl meshif bat0 interface del ${MESH_IFACE} 2>/dev/null || true
-    batctl meshif bat0 interface add -M ${MESH_IFACE}
+    ip link set dev ${MESH_IFACE} master bat0
+    ip link set dev ${MESH_IFACE} up
+    ip link set dev bat0 up
 
-    ip link set ${MESH_IFACE} up
-    ip link set bat0 up
     echo 0 > /sys/class/net/bat0/mesh/bridge_loop_avoidance 2>/dev/null || true
     echo 0 > /sys/class/net/bat0/mesh/ap_isolation 2>/dev/null || true
+    echo 1 > /sys/class/net/bat0/mesh/distributed_arp_table 2>/dev/null || true
 
     ip -4 addr flush dev bat0
     ip addr add ${bat_ip} dev bat0
@@ -309,8 +311,34 @@ configure_batman_node() {
     ip -4 addr flush dev ${MESH_IFACE}
     ip -6 addr flush dev ${MESH_IFACE} 2>/dev/null || true
 
-    batctl meshif bat0 interface | grep -q ${MESH_IFACE}
+    ip link show master bat0 | grep -q ${MESH_IFACE}
   "
+}
+
+finalize_batman_mesh() {
+  local node
+  echo "==> Finalizing BATMAN data plane on all nodes"
+  for node in "${NODES[@]}"; do
+    run_in_node "${node}" "
+      sysctl -qw net.ipv4.conf.bat0.rp_filter=0 2>/dev/null || true
+      echo 1 > /sys/class/net/bat0/mesh/distributed_arp_table 2>/dev/null || true
+      ip link set bat0 up
+      ip neigh flush dev bat0 2>/dev/null || true
+    " 2>/dev/null || true
+  done
+  sleep 5
+}
+
+mesh_has_route() {
+  local observer="$1"
+  local target_ip="$2"
+  run_in_node "${observer}" "batctl meshif ${BATMESH_IF} o 2>/dev/null | grep -qw '${target_ip}'"
+}
+
+mesh_routes_ready() {
+  local observer="${1:-${LAB_CLIENT_NODE}}"
+  mesh_has_route "${observer}" "$(lab_server_ip)" \
+    && mesh_has_route "${observer}" "$(lab_last_node_ip)"
 }
 
 reconcile_batman_hardifs() {
@@ -323,8 +351,22 @@ reconcile_batman_hardifs() {
 mesh_ping_test() {
   local client="$1"
   local target_ip="$2"
-  run_in_node "${client}" "batctl meshif ${BATMESH_IF} ping -c 3 ${target_ip}" 2>/dev/null \
-    || run_in_node "${client}" "ping -c 3 -W 2 ${target_ip}" 2>/dev/null
+  local tries="${3:-8}"
+  local i
+
+  for ((i = 1; i <= tries; i++)); do
+    if run_in_node "${client}" "batctl meshif ${BATMESH_IF} ping -c 1 -t 2 ${target_ip}" 2>/dev/null; then
+      run_in_node "${client}" "batctl meshif ${BATMESH_IF} ping -c 2 -t 2 ${target_ip}" 2>/dev/null \
+        || run_in_node "${client}" "ping -c 2 -W 2 ${target_ip}" 2>/dev/null
+      return 0
+    fi
+    if run_in_node "${client}" "ping -c 1 -W 2 ${target_ip}" 2>/dev/null; then
+      run_in_node "${client}" "ping -c 2 -W 2 ${target_ip}" 2>/dev/null
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
 }
 
 wait_for_mesh_convergence() {
@@ -333,30 +375,32 @@ wait_for_mesh_convergence() {
   local timeout="${3:-90}"
   local elapsed=0 n o
 
-  echo "==> Waiting for BATMAN mesh (expect >= ${want} neighbors on ${observer})"
+  echo "==> Waiting for BATMAN mesh (neighbors + routes to $(lab_server_ip))"
   while [[ "${elapsed}" -lt "${timeout}" ]]; do
     n="$(count_neighbors "${observer}")"
     o="$(count_originators "${observer}")"
-    if [[ "${n}" -ge "${want}" || "${o}" -ge $((want + 1)) ]]; then
-      echo "    Mesh ready: neighbors=${n} originators=${o} (${elapsed}s)"
+    if [[ "${n}" -ge "${want}" ]] && mesh_routes_ready "${observer}"; then
+      echo "    Mesh ready: neighbors=${n} originators=${o} routes=OK (${elapsed}s)"
       return 0
     fi
     if (( elapsed > 0 && elapsed % 10 == 0 )); then
+      finalize_batman_mesh
       reconcile_batman_hardifs
     fi
     sleep 2
     elapsed=$((elapsed + 2))
   done
 
+  finalize_batman_mesh
   reconcile_batman_hardifs
   sleep 3
   n="$(count_neighbors "${observer}")"
   o="$(count_originators "${observer}")"
-  if [[ "${n}" -ge "${want}" || "${o}" -ge $((want + 1)) ]]; then
-    echo "    Mesh ready after reconcile: neighbors=${n} originators=${o}"
+  if [[ "${n}" -ge "${want}" ]] && mesh_routes_ready "${observer}"; then
+    echo "    Mesh ready after finalize: neighbors=${n} originators=${o} routes=OK"
     return 0
   fi
-  echo "WARNING: mesh not converged after ${timeout}s (neighbors=${n}, originators=${o}, want>=${want})"
+  echo "WARNING: mesh not ready after ${timeout}s (neighbors=${n}, originators=${o}, routes=$(mesh_routes_ready "${observer}" && echo OK || echo missing))"
   show_mesh_diagnostics "${observer}"
   return 1
 }
@@ -376,7 +420,9 @@ show_mesh_diagnostics() {
     echo '--- ip addr ---'
     ip -4 addr show dev ${MESH_IFACE}
     ip -4 addr show dev bat0
-    echo '--- promisc ---'
-    ip link show dev ${MESH_IFACE} | grep -i promisc || true
+    echo '--- batctl ping ---'
+    batctl meshif bat0 ping -c 1 -t 2 $(lab_server_ip) 2>&1 || true
+    echo '--- ip neigh bat0 ---'
+    ip neigh show dev bat0 2>/dev/null || true
   "
 }
