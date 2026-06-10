@@ -3,7 +3,6 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${ROOT}"
-
 # shellcheck source=scripts/lib.sh
 source "${ROOT}/scripts/lib.sh"
 
@@ -25,8 +24,19 @@ fi
 echo "==> Starting MANET nodes (${NODE_COUNT} containers)…"
 docker compose up -d
 
-echo "==> Configuring MANET node tools and overlay IPs (see setup_batman.sh)…"
-"${ROOT}/scripts/setup_batman.sh" auto --skip-compose
+echo "==> Configuring MANET (BATMAN first, fallback if mesh fails)…"
+if [[ "$(uname -s)" == "Linux" ]]; then
+  ensure_host_batman_prereqs || true
+  tune_manet_bridge || true
+fi
+
+if ! "${ROOT}/scripts/setup_batman.sh" batman --skip-compose; then
+  echo ""
+  echo "WARNING: BATMAN setup failed — switching to fallback mode (IPs on eth0)."
+  echo "         Real BATMAN/ELP metrics will NOT be available."
+  echo "         Run ./scripts/debug_mesh.sh to troubleshoot."
+  "${ROOT}/scripts/setup_batman.sh" fallback --skip-compose
+fi
 
 echo "==> Starting iperf3 server on node2 (port 5201)…"
 if docker exec node2 bash -lc "ss -ltn 2>/dev/null | grep -q ':5201 '"; then
@@ -40,4 +50,5 @@ echo "Lab is ready (${NODE_COUNT} MANET nodes on ${MESH_SUBNET_PREFIX}.0/24)."
 echo ""
 echo "Quick checks:"
 echo "  docker exec node1 bash -lc \"ping -c 3 10.0.0.2\""
-echo "  docker exec node1 bash -lc \"iperf3 -c 10.0.0.2 -t 10\""
+echo "  ./scripts/observe_batman.sh node1 all"
+echo "  ./scripts/debug_mesh.sh"

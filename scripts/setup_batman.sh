@@ -71,6 +71,10 @@ else
   echo "==> Skipping docker compose (stack assumed already up)"
 fi
 
+if [[ "$(uname -s)" == "Linux" ]]; then
+  tune_manet_bridge || true
+fi
+
 if [[ "${MODE}" == "batman" ]]; then
   if [[ "${OS_NAME}" != "Linux" ]]; then
     echo "WARNING: 'batman' mode requires Linux host kernel."
@@ -89,12 +93,12 @@ if [[ "${MODE}" == "batman" ]]; then
       echo "==> Loading batman-adv module on host (sudo password may be requested)"
       if ! sudo modprobe batman-adv; then
         echo "ERROR: could not load batman-adv on the host."
-        echo "Hint: run 'sudo modprobe batman-adv', then rerun:"
-        echo "      ./scripts/setup_batman.sh batman --skip-compose"
-        echo "Or use fallback mode (no real BATMAN): ./scripts/setup_batman.sh fallback --skip-compose"
+        echo "Hint: sudo apt install linux-modules-extra-\$(uname -r)"
+        echo "      sudo modprobe batman-adv"
         exit 1
       fi
     fi
+    ensure_host_batman_prereqs || true
   fi
 fi
 
@@ -102,7 +106,7 @@ echo "==> Installing tools in containers (batctl, iproute2, ping, iperf3, tcpdum
 pids=()
 for node in "${NODES[@]}"; do
   docker exec "${node}" bash -lc \
-    "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y batctl iproute2 iputils-ping iperf3 tcpdump" &
+    "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y batctl iproute2 iputils-ping iperf3 tcpdump kmod" &
   pids+=($!)
 done
 for pid in "${pids[@]}"; do
@@ -118,7 +122,8 @@ if [[ "${MODE}" == "batman" ]]; then
     configure_batman_node "${node}" "${bat_ip}"
   done
 
-  wait_for_mesh_convergence "${LAB_CLIENT_NODE}" $((NODE_COUNT - 1)) 45 || true
+  MESH_OK=1
+  wait_for_mesh_convergence "${LAB_CLIENT_NODE}" $((NODE_COUNT - 1)) 60 || MESH_OK=0
 
   echo "==> BATMAN interfaces"
   for node in "${NODES[@]}"; do
@@ -140,13 +145,21 @@ else
 fi
 
 echo "==> Connectivity test over ${MESH_SUBNET_PREFIX}.0/24 (${NODE_COUNT} nodes)"
-if ! docker exec node1 bash -lc "ping -c 3 -W 2 $(lab_server_ip)"; then
-  show_mesh_diagnostics node1
-  echo "ERROR: ping to $(lab_server_ip) failed."
-  echo "Hint: sudo modprobe batman-adv on host, then rerun ./scripts/setup_batman.sh batman --skip-compose"
-  exit 1
+if [[ "${MODE}" == "batman" ]]; then
+  if ! mesh_ping_test "${LAB_CLIENT_NODE}" "$(lab_server_ip)" 3; then
+    show_mesh_diagnostics "${LAB_CLIENT_NODE}"
+    echo "ERROR: BATMAN mesh ping failed."
+    echo "Run: ./scripts/debug_mesh.sh"
+    exit 1
+  fi
+  mesh_ping_test "${LAB_CLIENT_NODE}" "$(lab_last_node_ip)" 3 || show_mesh_diagnostics "${LAB_CLIENT_NODE}"
+else
+  if ! docker exec node1 bash -lc "ping -c 3 -W 2 $(lab_server_ip)"; then
+    echo "ERROR: ping to $(lab_server_ip) failed in fallback mode."
+    exit 1
+  fi
+  docker exec node1 bash -lc "ping -c 3 -W 2 $(lab_last_node_ip)" || true
 fi
-docker exec node1 bash -lc "ping -c 3 -W 2 $(lab_last_node_ip)" || show_mesh_diagnostics node1
 
 echo "==> Optional: start iperf3 server on node2"
 echo "docker exec -d node2 bash -lc 'iperf3 -s'"

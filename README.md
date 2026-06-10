@@ -75,18 +75,25 @@ Config : `scripts/lib.sh` (`NODE_COUNT=3`)
 
 ## Dépannage ping « Destination Host Unreachable »
 
-BATMAN exige **aucune IP sur `eth0`** (seulement sur `bat0`). Le setup flush maintenant `eth0` automatiquement.
+BATMAN exige **aucune IP sur `eth0`** (seulement sur `bat0`). Le setup flush `eth0` et attache `eth0` à `bat0` via le kernel (`ip link set master bat0`).
+
+Cause fréquente sous Docker : **multicast snooping** sur le bridge bloque les OGMs BATMAN. Le script désactive cela automatiquement (`tune_manet_bridge`).
 
 ```bash
+git pull
 sudo modprobe batman-adv
-./scripts/setup_batman.sh batman --skip-compose
+docker compose down
+./scripts/start_lab.sh          # recrée le réseau manet + tune le bridge
+./scripts/debug_mesh.sh         # multicast_snooping doit être 0
 docker exec node1 bash -lc "batctl n"    # doit lister node2 et node3
 docker exec node1 bash -lc "ping -c 3 10.0.0.2"
 ```
+
+Si BATMAN reste impossible sur votre VM, `start_lab.sh` bascule en **fallback** (IPs sur eth0, pas de vrai BATMAN/ELP).
 
 ## Nettoyage
 
 ```bash
 docker compose down
-docker rm -f node4 node5 node6 node7 node8 node9 node10 2>/dev/null || true
+docker rm -f node1 node2 node3 2>/dev/null || true
 ```

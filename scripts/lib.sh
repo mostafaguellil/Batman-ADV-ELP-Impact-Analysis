@@ -69,7 +69,46 @@ run_in_node() {
 }
 
 restore_batman_hardif() {
-  run_in_node "$1" "ip link set ${MESH_IFACE} up; ip -4 addr flush dev ${MESH_IFACE}; batctl if add ${MESH_IFACE} 2>/dev/null || true"
+  run_in_node "$1" "
+    sysctl -qw net.ipv4.conf.all.rp_filter=0 2>/dev/null || true
+    sysctl -qw net.ipv4.conf.${MESH_IFACE}.rp_filter=0 2>/dev/null || true
+    ip link set ${MESH_IFACE} up
+    ip link set dev ${MESH_IFACE} promisc on 2>/dev/null || true
+    ip -4 addr flush dev ${MESH_IFACE}
+    ip -6 addr flush dev ${MESH_IFACE} 2>/dev/null || true
+    if ip link show bat0 >/dev/null 2>&1; then
+      ip link set dev ${MESH_IFACE} master bat0 2>/dev/null \
+        || batctl -m bat0 if add -M ${MESH_IFACE} 2>/dev/null \
+        || batctl if add ${MESH_IFACE} 2>/dev/null || true
+      batctl -m bat0 if en ${MESH_IFACE} 2>/dev/null || batctl if enable ${MESH_IFACE} 2>/dev/null || true
+    fi
+  "
+}
+
+ensure_host_batman_prereqs() {
+  echo "==> Host tweaks for Docker bridge + BATMAN"
+  sudo sysctl -qw net.bridge.bridge-nf-call-iptables=0 2>/dev/null || true
+  sudo sysctl -qw net.bridge.bridge-nf-call-ip6tables=0 2>/dev/null || true
+  sudo sysctl -qw net.bridge.bridge-nf-call-arptables=0 2>/dev/null || true
+  sudo sysctl -qw net.ipv4.conf.all.rp_filter=0 2>/dev/null || true
+  sudo sysctl -qw net.ipv4.conf.default.rp_filter=0 2>/dev/null || true
+}
+
+tune_manet_bridge() {
+  local net_id br_if
+  init_network || return 0
+  net_id="$(docker network inspect "${MESH_NETWORK}" --format '{{.Id}}' 2>/dev/null || true)"
+  [[ -n "${net_id}" ]] || return 0
+  br_if="br-${net_id:0:12}"
+  if [[ ! -d "/sys/class/net/${br_if}/bridge" ]]; then
+    echo "WARNING: bridge interface ${br_if} not found (network ${MESH_NETWORK})"
+    return 0
+  fi
+  echo "==> Tuning Docker bridge ${br_if} for BATMAN L2 multicast"
+  ensure_host_batman_prereqs || true
+  echo 0 | sudo tee "/sys/class/net/${br_if}/bridge/multicast_snooping" >/dev/null 2>&1 || true
+  echo 0 | sudo tee "/sys/class/net/${br_if}/bridge/multicast_querier" >/dev/null 2>&1 || true
+  echo 65536 | sudo tee "/sys/class/net/${br_if}/bridge/ageing_time" >/dev/null 2>&1 || true
 }
 
 mesh_disconnect() {
@@ -183,48 +222,98 @@ stop_iperf_server() {
   run_in_node "${LAB_SERVER_NODE}" "pkill iperf3 >/dev/null 2>&1 || true" || true
 }
 
-# BATMAN-adv: no IP on hardif (eth0), only on bat0. Required for Docker bridge meshes.
+# BATMAN-adv: no IP on hardif (eth0), only on bat0.
 configure_batman_node() {
   local node="$1"
   local bat_ip="$2"
 
   run_in_node "${node}" "
     set -e
+    modprobe batman-adv 2>/dev/null || true
+
+    sysctl -qw net.ipv4.conf.all.rp_filter=0
+    sysctl -qw net.ipv4.conf.default.rp_filter=0
+    sysctl -qw net.ipv4.conf.${MESH_IFACE}.rp_filter=0
+
+    iptables -P INPUT ACCEPT 2>/dev/null || true
+    iptables -P FORWARD ACCEPT 2>/dev/null || true
+    iptables -P OUTPUT ACCEPT 2>/dev/null || true
+    iptables -F 2>/dev/null || true
+    iptables -t nat -F 2>/dev/null || true
+    iptables -t mangle -F 2>/dev/null || true
+
     ip link set ${MESH_IFACE} up
+    ip link set dev ${MESH_IFACE} promisc on
     ip -4 addr flush dev ${MESH_IFACE}
     ip -6 addr flush dev ${MESH_IFACE} 2>/dev/null || true
     ip link del dev bat0 2>/dev/null || true
-    ip link add name bat0 type batadv
-    batctl if del ${MESH_IFACE} 2>/dev/null || true
-    batctl if add ${MESH_IFACE}
+
+    if ! ip link add name bat0 type batadv 2>/dev/null; then
+      batctl -m bat0 interface create 2>/dev/null \
+        || batctl -m bat0 if create 2>/dev/null \
+        || { echo 'ERROR: cannot create bat0 (is batman-adv loaded on host?)' >&2; exit 1; }
+    fi
+
+    batctl -m bat0 if del ${MESH_IFACE} 2>/dev/null || true
+    if ! ip link set dev ${MESH_IFACE} master bat0 2>/dev/null; then
+      batctl -m bat0 if add -M ${MESH_IFACE} 2>/dev/null || batctl if add ${MESH_IFACE}
+    fi
+    batctl -m bat0 if en ${MESH_IFACE} 2>/dev/null || batctl if enable ${MESH_IFACE} 2>/dev/null || true
+
+    ip link set up dev ${MESH_IFACE}
     ip link set up dev bat0
-    for key in bridge_loop_avoidance ap_isolation; do
-      echo 0 > /sys/class/net/bat0/mesh/\${key} 2>/dev/null || true
-    done
+    echo 0 > /sys/class/net/bat0/mesh/bridge_loop_avoidance 2>/dev/null || true
+    echo 0 > /sys/class/net/bat0/mesh/ap_isolation 2>/dev/null || true
+
     ip -4 addr flush dev bat0
     ip addr add ${bat_ip} dev bat0
+
+    ip link show master bat0 2>/dev/null | grep -q ${MESH_IFACE} \
+      || batctl -m bat0 if 2>/dev/null | grep -q ${MESH_IFACE} \
+      || { echo 'ERROR: ${MESH_IFACE} not attached to bat0' >&2; exit 1; }
   "
+}
+
+reconcile_batman_hardifs() {
+  local node
+  for node in "${NODES[@]}"; do
+    restore_batman_hardif "${node}" >/dev/null 2>&1 || true
+  done
+}
+
+mesh_ping_test() {
+  local client="$1"
+  local target_ip="$2"
+  run_in_node "${client}" "ping -c 3 -W 2 ${target_ip}" 2>/dev/null \
+    || run_in_node "${client}" "batctl -m bat0 ping -c 3 ${target_ip}" 2>/dev/null
 }
 
 wait_for_mesh_convergence() {
   local observer="${1:-${LAB_CLIENT_NODE}}"
   local want="${2:-$((NODE_COUNT - 1))}"
-  local timeout="${3:-45}"
-  local elapsed=0 n
+  local timeout="${3:-60}"
+  local elapsed=0 n o
 
   echo "==> Waiting for BATMAN mesh (expect >= ${want} neighbors on ${observer})"
   while [[ "${elapsed}" -lt "${timeout}" ]]; do
     n="$(count_neighbors "${observer}")"
-    if [[ "${n}" -ge "${want}" ]]; then
-      echo "    Mesh ready: ${n} neighbor(s) on ${observer} (${elapsed}s)"
+    o="$(count_originators "${observer}")"
+    if [[ "${n}" -ge "${want}" && "${o}" -ge "${want}" ]]; then
+      echo "    Mesh ready: neighbors=${n} originators=${o} (${elapsed}s)"
       return 0
+    fi
+    if (( elapsed > 0 && elapsed % 10 == 0 )); then
+      reconcile_batman_hardifs
     fi
     sleep 2
     elapsed=$((elapsed + 2))
   done
 
-  echo "WARNING: mesh not converged after ${timeout}s (neighbors=${n}, want>=${want})"
-  run_in_node "${observer}" "batctl n; batctl o" || true
+  reconcile_batman_hardifs
+  n="$(count_neighbors "${observer}")"
+  o="$(count_originators "${observer}")"
+  echo "WARNING: mesh not converged after ${timeout}s (neighbors=${n}, originators=${o}, want>=${want})"
+  show_mesh_diagnostics "${observer}"
   return 1
 }
 
@@ -233,13 +322,17 @@ show_mesh_diagnostics() {
   echo "==> Diagnostics on ${node}"
   run_in_node "${node}" "
     echo '--- batctl if ---'
-    batctl if 2>/dev/null || true
+    batctl -m bat0 if 2>/dev/null || batctl if 2>/dev/null || true
+    echo '--- ip link master bat0 ---'
+    ip link show master bat0 2>/dev/null || echo 'no slaves on bat0'
     echo '--- batctl n ---'
-    batctl n 2>/dev/null || true
+    batctl -m bat0 n 2>/dev/null || true
     echo '--- batctl o ---'
-    batctl o 2>/dev/null || true
+    batctl -m bat0 o 2>/dev/null || true
     echo '--- ip addr ---'
     ip -4 addr show dev ${MESH_IFACE}
     ip -4 addr show dev bat0
+    echo '--- promisc ---'
+    ip link show dev ${MESH_IFACE} | grep -i promisc || true
   "
 }

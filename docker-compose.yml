@@ -4,6 +4,9 @@ x-batman-node: &batman-node
   cap_add:
     - NET_ADMIN
     - SYS_MODULE
+  sysctls:
+    net.ipv4.conf.all.rp_filter: "0"
+    net.ipv4.conf.default.rp_filter: "0"
   volumes:
     - /lib/modules:/lib/modules:ro
   networks:
@@ -27,3 +30,6 @@ services:
 networks:
   manet:
     driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "false"
