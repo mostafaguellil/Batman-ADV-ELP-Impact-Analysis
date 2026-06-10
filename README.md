@@ -24,6 +24,8 @@ docker compose down
 
 Le lab utilise un réseau **macvlan** sur l'interface dummy `manet0` (L2 propre pour BATMAN). Les IPs mesh sont sur `bat0` (`10.0.0.1`–`10.0.0.3`), pas sur `eth0`.
 
+`start_lab.sh` lance `docker compose build` sur l'hôte (internet requis une fois) — les conteneurs macvlan n'ont pas accès à apt en runtime.
+
 **VMware / VirtualBox :** activer **Promiscuous Mode = Allow** sur la carte réseau de la VM.
 
 Sans BATMAN (connectivité Docker seulement) :

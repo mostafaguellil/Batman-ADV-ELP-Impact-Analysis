@@ -25,6 +25,9 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   preflight_ubuntu_batman
 fi
 
+echo "==> Building node image (apt runs on host during build, not inside macvlan)…"
+docker compose build
+
 echo "==> Starting MANET nodes (${NODE_COUNT} containers on macvlan/${MANET_PARENT_IF})…"
 docker compose up -d
 

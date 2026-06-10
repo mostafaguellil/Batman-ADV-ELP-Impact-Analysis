@@ -69,6 +69,7 @@ if [[ "${SKIP_COMPOSE}" -eq 0 ]]; then
       docker rm -f "${node}" >/dev/null
     fi
   done
+  docker compose build
   docker compose up -d
 else
   echo "==> Skipping docker compose (stack assumed already up)"
@@ -105,16 +106,7 @@ if [[ "${MODE}" == "batman" ]]; then
   fi
 fi
 
-echo "==> Installing tools in containers (batctl, iproute2, ping, iperf3, tcpdump)"
-pids=()
-for node in "${NODES[@]}"; do
-  docker exec "${node}" bash -lc \
-    "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y batctl iproute2 iputils-ping iperf3 tcpdump kmod" &
-  pids+=($!)
-done
-for pid in "${pids[@]}"; do
-  wait "${pid}" || { echo "ERROR: package install failed (pid ${pid})" >&2; exit 1; }
-done
+ensure_container_tools
 
 if [[ "${MODE}" == "batman" ]]; then
   echo "==> Configuring BATMAN-Adv in each node (no IP on ${UNDERLAY_IF}, only bat0)"

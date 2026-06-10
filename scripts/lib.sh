@@ -122,6 +122,23 @@ tune_manet_bridge() {
   echo 65536 | sudo tee "/sys/class/net/${br_if}/bridge/ageing_time" >/dev/null 2>&1 || true
 }
 
+ensure_container_tools() {
+  local node missing=()
+  for node in "${NODES[@]}"; do
+    for cmd in batctl ip iperf3 tcpdump ping; do
+      if ! docker exec "${node}" bash -lc "command -v ${cmd}" >/dev/null 2>&1; then
+        missing+=("${node}:${cmd}")
+      fi
+    done
+  done
+  if ((${#missing[@]} > 0)); then
+    echo "ERROR: missing tools in containers: ${missing[*]}"
+    echo "Hint: docker compose build && docker compose up -d --force-recreate"
+    return 1
+  fi
+  echo "==> Container tools OK (batctl, iproute2, iperf3, tcpdump, ping)"
+}
+
 preflight_ubuntu_batman() {
   local ok=1
   echo "==> Ubuntu BATMAN preflight"

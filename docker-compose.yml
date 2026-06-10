@@ -1,5 +1,6 @@
 x-batman-node: &batman-node
-  image: ubuntu:22.04
+  build: .
+  image: batman-manet-node:22.04
   privileged: true
   cap_add:
     - NET_ADMIN
@@ -11,7 +12,7 @@ x-batman-node: &batman-node
     - /lib/modules:/lib/modules:ro
   networks:
     - manet
-  command: ["bash", "-c", "sleep infinity"]
+  command: ["sleep", "infinity"]
 
 services:
   node1:
