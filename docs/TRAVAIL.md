@@ -29,15 +29,16 @@ Applications → bat0 (10.0.0.x) → BATMAN-Adv (OGM + ELP) → eth0 (bridge Doc
 
 ## 4. Environnement de test
 
-- **10 nœuds** `node1…node10` sur bridge `manet`
-- **Client** `node1`, **serveur iperf** `node2`
-- Densité variable via `set_mesh_density()` dans `lib.sh`
+- **3 nœuds** `node1`, `node2`, `node3` sur bridge `manet`
+- **Client** `node1`, **serveur iperf** `node2`, **churn** `node3`
+- Module `batman-adv` chargé sur **l'hôte Linux** (`sudo modprobe batman-adv`)
 
 ### Installation
 
 ```bash
 git clone https://github.com/mostafaguellil/Batman-ADV-ELP-Impact-Analysis.git
 cd Batman-ADV-ELP-Impact-Analysis
+sudo modprobe batman-adv
 ./scripts/start_lab.sh
 ./scripts/run_study.sh
 ```
@@ -45,7 +46,7 @@ cd Batman-ADV-ELP-Impact-Analysis
 ## 5. Méthodologie
 
 ### Benchmark densité
-Pour N = 3, 5, 7, 10 : convergence 30s, capture tcpdump 20s, ping, iperf3.
+Pour N = 2 ou 3 nœuds actifs : convergence 20s, capture tcpdump 15s, ping, iperf3.
 
 ### Random walk
 Un nœud déconnecté/reconnecté à la fois ; métriques `during_disconnect` vs `after_reconnect`.
@@ -57,10 +58,8 @@ Un nœud déconnecté/reconnecté à la fois ; métriques `during_disconnect` vs
 
 | Densité | PPS | Voisins | Latence (ms) | Débit (Mbit/s) |
 |---------|-----|---------|--------------|----------------|
+| 2 | | | | |
 | 3 | | | | |
-| 5 | | | | |
-| 7 | | | | |
-| 10 | | | | |
 
 Fichiers : `results/density_*.csv`, `results/random_walk_*.csv`
 

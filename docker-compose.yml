@@ -4,6 +4,8 @@ x-batman-node: &batman-node
   cap_add:
     - NET_ADMIN
     - SYS_MODULE
+  volumes:
+    - /lib/modules:/lib/modules:ro
   networks:
     - manet
   command: ["bash", "-c", "sleep infinity"]
@@ -21,34 +23,6 @@ services:
     <<: *batman-node
     container_name: node3
     hostname: node3
-  node4:
-    <<: *batman-node
-    container_name: node4
-    hostname: node4
-  node5:
-    <<: *batman-node
-    container_name: node5
-    hostname: node5
-  node6:
-    <<: *batman-node
-    container_name: node6
-    hostname: node6
-  node7:
-    <<: *batman-node
-    container_name: node7
-    hostname: node7
-  node8:
-    <<: *batman-node
-    container_name: node8
-    hostname: node8
-  node9:
-    <<: *batman-node
-    container_name: node9
-    hostname: node9
-  node10:
-    <<: *batman-node
-    container_name: node10
-    hostname: node10
 
 networks:
   manet:

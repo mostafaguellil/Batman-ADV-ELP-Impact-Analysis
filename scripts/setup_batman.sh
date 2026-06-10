@@ -79,8 +79,8 @@ if [[ "${MODE}" == "batman" ]]; then
   else
     require_cmd modprobe "Install kmod package on host and retry."
     if ! modinfo batman-adv >/dev/null 2>&1; then
-      echo "ERROR: Kernel module metadata for 'batman-adv' was not found."
-      echo "Hint: install a kernel package that includes batman-adv, then retry."
+      echo "ERROR: Kernel module 'batman-adv' not found on the host."
+      echo "Hint: sudo apt install linux-modules-extra-\$(uname -r)"
       exit 1
     fi
     if lsmod | grep -q '^batman_adv'; then
@@ -102,7 +102,7 @@ echo "==> Installing tools in containers (batctl, iproute2, ping, iperf3, tcpdum
 pids=()
 for node in "${NODES[@]}"; do
   docker exec "${node}" bash -lc \
-    "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y kmod batctl iproute2 iputils-ping iperf3 tcpdump" &
+    "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y batctl iproute2 iputils-ping iperf3 tcpdump" &
   pids+=($!)
 done
 for pid in "${pids[@]}"; do
@@ -116,10 +116,10 @@ if [[ "${MODE}" == "batman" ]]; then
     bat_ip="${BAT_IPS[$i]}"
 
     docker exec "${node}" bash -lc "
-      modprobe batman-adv || true
       ip link set ${UNDERLAY_IF} up
-      ip link add name bat0 type batadv || true
-      batctl if add ${UNDERLAY_IF} || true
+      ip link del dev bat0 2>/dev/null || true
+      ip link add name bat0 type batadv
+      batctl if add ${UNDERLAY_IF}
       ip link set up dev bat0
       ip addr flush dev bat0
       ip addr add ${bat_ip} dev bat0
@@ -147,7 +147,6 @@ fi
 
 echo "==> Connectivity test over ${MESH_SUBNET_PREFIX}.0/24 (${NODE_COUNT} nodes)"
 docker exec node1 bash -lc "ping -c 3 $(lab_server_ip)"
-docker exec node1 bash -lc "ping -c 3 ${MESH_SUBNET_PREFIX}.5"
 docker exec node1 bash -lc "ping -c 3 $(lab_last_node_ip)"
 
 echo "==> Optional: start iperf3 server on node2"

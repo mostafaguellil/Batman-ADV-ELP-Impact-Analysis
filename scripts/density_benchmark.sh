@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/lib.sh
 source "${ROOT}/scripts/lib.sh"
 
-DENSITY_LIST="${1:-3 5 7 10}"
+DENSITY_LIST="${1:-2 3}"
 CAPTURE_SECS="${2:-20}"
 CONVERGE_SECS="${3:-30}"
 SERVER_IP="$(lab_server_ip)"
