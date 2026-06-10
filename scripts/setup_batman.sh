@@ -77,26 +77,36 @@ if [[ "${MODE}" == "batman" ]]; then
     echo "Hint: on macOS it cannot load batman-adv; switching to 'fallback' so you can keep testing ping/iperf/tcpdump."
     MODE="fallback"
   else
-    require_cmd sudo "Install sudo or run this script as root."
     require_cmd modprobe "Install kmod package on host and retry."
-    if ! sudo -n true >/dev/null 2>&1; then
-      echo "ERROR: sudo requires a password or is unavailable for this user."
-      echo "Hint: run 'sudo -v' first, then rerun this script."
-      exit 1
-    fi
     if ! modinfo batman-adv >/dev/null 2>&1; then
       echo "ERROR: Kernel module metadata for 'batman-adv' was not found."
       echo "Hint: install a kernel package that includes batman-adv, then retry."
       exit 1
     fi
-    echo "==> Loading batman-adv module on host"
-    sudo modprobe batman-adv
+    if lsmod | grep -q '^batman_adv'; then
+      echo "==> batman-adv already loaded on host"
+    else
+      echo "==> Loading batman-adv module on host (sudo password may be requested)"
+      if ! sudo modprobe batman-adv; then
+        echo "ERROR: could not load batman-adv on the host."
+        echo "Hint: run 'sudo modprobe batman-adv', then rerun:"
+        echo "      ./scripts/setup_batman.sh batman --skip-compose"
+        echo "Or use fallback mode (no real BATMAN): ./scripts/setup_batman.sh fallback --skip-compose"
+        exit 1
+      fi
+    fi
   fi
 fi
 
 echo "==> Installing tools in containers (batctl, iproute2, ping, iperf3, tcpdump)"
+pids=()
 for node in "${NODES[@]}"; do
-  docker exec "${node}" bash -lc "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y kmod batctl iproute2 iputils-ping iperf3 tcpdump"
+  docker exec "${node}" bash -lc \
+    "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y kmod batctl iproute2 iputils-ping iperf3 tcpdump" &
+  pids+=($!)
+done
+for pid in "${pids[@]}"; do
+  wait "${pid}" || { echo "ERROR: package install failed (pid ${pid})" >&2; exit 1; }
 done
 
 if [[ "${MODE}" == "batman" ]]; then

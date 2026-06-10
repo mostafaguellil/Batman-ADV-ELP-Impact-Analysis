@@ -13,7 +13,25 @@ cd Batman-ADV-ELP-Impact-Analysis
 
 ```bash
 ./scripts/start_lab.sh          # lance les 10 nœuds + configure bat0
-./scripts/run_study.sh            # étude complète (plus rapide qu’avec 30 nœuds)
+```
+
+Sur **Linux**, le script peut demander ton mot de passe `sudo` une fois pour charger `batman-adv` sur l’hôte. Si tu préfères le faire manuellement :
+
+```bash
+sudo modprobe batman-adv
+./scripts/start_lab.sh
+```
+
+Sans BATMAN (connectivité Docker seulement) :
+
+```bash
+./scripts/setup_batman.sh fallback --skip-compose
+```
+
+Puis l’étude complète :
+
+```bash
+./scripts/run_study.sh
 ```
 
 ## Scripts
