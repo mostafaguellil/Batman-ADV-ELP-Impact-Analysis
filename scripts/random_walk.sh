@@ -24,7 +24,7 @@ log() { echo "[$(date '+%F %T')] $*" | tee -a "${OUT}"; }
 log_batman() {
   local label="$1"
   log "--- ${label} ---"
-  run_in_node "${LAB_CLIENT_NODE}" "batctl if; batctl n; batctl o" >>"${OUT}" 2>&1 || true
+  run_in_node "${LAB_CLIENT_NODE}" "batctl meshif bat0 interface; batctl meshif bat0 n; batctl meshif bat0 o" >>"${OUT}" 2>&1 || true
 }
 
 record() {

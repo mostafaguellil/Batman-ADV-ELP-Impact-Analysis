@@ -123,7 +123,7 @@ if [[ "${MODE}" == "batman" ]]; then
   echo "==> BATMAN interfaces"
   for node in "${NODES[@]}"; do
     echo "--- ${node} ---"
-    docker exec "${node}" bash -lc "batctl if && ip -4 addr show ${UNDERLAY_IF} && ip -4 addr show bat0"
+    docker exec "${node}" bash -lc "batctl meshif bat0 interface && ip -4 addr show ${UNDERLAY_IF} && ip -4 addr show bat0"
   done
 else
   echo "==> Fallback mode enabled (no batman-adv module required)"

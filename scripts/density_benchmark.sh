@@ -40,7 +40,7 @@ for density in ${DENSITY_LIST}; do
   snap="$(collect_mesh_snapshot "${LAB_CLIENT_NODE}" "${SERVER_IP}" "${CAPTURE_SECS}" 30 15)"
   echo "${density},${snap}" >>"${CSV}"
   log "${density},${snap}"
-  run_in_node "${LAB_CLIENT_NODE}" "batctl n; batctl o" >>"${OUT}" 2>&1 || true
+  run_in_node "${LAB_CLIENT_NODE}" "batctl meshif bat0 n; batctl meshif bat0 o" >>"${OUT}" 2>&1 || true
 done
 
 trap - EXIT; cleanup

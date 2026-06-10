@@ -32,12 +32,12 @@ for node in "${NODES[@]}"; do
   run_in_node "${node}" "
     echo '--- lsmod (container view) ---'
     lsmod 2>/dev/null | grep batman || echo 'batman_adv not in container lsmod'
-    echo '--- batctl if ---'
-    batctl -m bat0 if 2>&1 || batctl if 2>&1 || true
+    echo '--- batctl interface ---'
+    batctl meshif bat0 interface 2>&1 || true
     echo '--- batctl n ---'
-    batctl -m bat0 n 2>&1 || true
+    batctl meshif bat0 n 2>&1 || true
     echo '--- batctl o ---'
-    batctl -m bat0 o 2>&1 || true
+    batctl meshif bat0 o 2>&1 || true
     echo '--- ip addr ---'
     ip -4 addr show dev ${MESH_IFACE}
     ip -4 addr show dev bat0 2>/dev/null || echo 'no bat0'
@@ -66,7 +66,7 @@ ip link show "${MANET_PARENT_IF}" 2>/dev/null || echo "  ${MANET_PARENT_IF}: not
 echo ""
 echo "----- Quick test from node1 -----"
 run_in_node node1 "ping -c 2 -W 1 $(lab_server_ip)" 2>&1 || true
-run_in_node node1 "batctl -m bat0 ping -c 2 $(lab_server_ip)" 2>&1 || true
+run_in_node node1 "batctl meshif bat0 ping -c 2 $(lab_server_ip)" 2>&1 || true
 
 echo ""
 echo "If batctl n is empty and tcpdump shows 0 frames:"

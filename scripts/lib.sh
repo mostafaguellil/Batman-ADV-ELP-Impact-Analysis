@@ -5,6 +5,7 @@ NODE_COUNT=3
 MESH_SUBNET_PREFIX="10.0.0"
 MESH_IFACE="eth0"
 BATMAN_ETHERTYPE="0x4305"
+BATMESH_IF="bat0"
 LAB_CLIENT_NODE="node1"
 LAB_SERVER_NODE="node2"
 
@@ -78,8 +79,8 @@ restore_batman_hardif() {
     ip link set dev ${MESH_IFACE} promisc on 2>/dev/null || true
     ip -4 addr flush dev ${MESH_IFACE}
     if ip link show bat0 >/dev/null 2>&1; then
-      batctl -m bat0 if add -M ${MESH_IFACE} 2>/dev/null || true
-      batctl -m bat0 if en ${MESH_IFACE} 2>/dev/null || true
+      batctl meshif bat0 interface add -M ${MESH_IFACE} 2>/dev/null || true
+      ip link set ${MESH_IFACE} up
     fi
   "
 }
@@ -226,11 +227,11 @@ batman_pps() {
 
 count_neighbors() {
   # batctl n lists MAC addresses, not IPs
-  run_in_node "$1" "batctl -m bat0 n 2>/dev/null | grep -Ei '([0-9a-f]{2}:){5}[0-9a-f]{2}' | wc -l | tr -d ' '" || echo "0"
+  run_in_node "$1" "batctl meshif ${BATMESH_IF} n 2>/dev/null | grep -Ei '([0-9a-f]{2}:){5}[0-9a-f]{2}' | wc -l | tr -d ' '" || echo "0"
 }
 
 count_originators() {
-  run_in_node "$1" "batctl -m bat0 o 2>/dev/null | grep -E '[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+' | wc -l | tr -d ' '" || echo "0"
+  run_in_node "$1" "batctl meshif ${BATMESH_IF} o 2>/dev/null | grep -E '[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+' | wc -l | tr -d ' '" || echo "0"
 }
 
 read_batman_sysfs() {
@@ -294,10 +295,10 @@ configure_batman_node() {
     ip link del bat0 2>/dev/null || true
     ip link add name bat0 type batadv
 
-    batctl -m bat0 if del ${MESH_IFACE} 2>/dev/null || true
-    batctl -m bat0 if add -M ${MESH_IFACE}
-    batctl -m bat0 if en ${MESH_IFACE}
+    batctl meshif bat0 interface del ${MESH_IFACE} 2>/dev/null || true
+    batctl meshif bat0 interface add -M ${MESH_IFACE}
 
+    ip link set ${MESH_IFACE} up
     ip link set bat0 up
     echo 0 > /sys/class/net/bat0/mesh/bridge_loop_avoidance 2>/dev/null || true
     echo 0 > /sys/class/net/bat0/mesh/ap_isolation 2>/dev/null || true
@@ -308,7 +309,7 @@ configure_batman_node() {
     ip -4 addr flush dev ${MESH_IFACE}
     ip -6 addr flush dev ${MESH_IFACE} 2>/dev/null || true
 
-    batctl -m bat0 if | grep -q ${MESH_IFACE}
+    batctl meshif bat0 interface | grep -q ${MESH_IFACE}
   "
 }
 
@@ -322,7 +323,7 @@ reconcile_batman_hardifs() {
 mesh_ping_test() {
   local client="$1"
   local target_ip="$2"
-  run_in_node "${client}" "batctl -m bat0 ping -c 3 ${target_ip}" 2>/dev/null \
+  run_in_node "${client}" "batctl meshif ${BATMESH_IF} ping -c 3 ${target_ip}" 2>/dev/null \
     || run_in_node "${client}" "ping -c 3 -W 2 ${target_ip}" 2>/dev/null
 }
 
@@ -364,14 +365,14 @@ show_mesh_diagnostics() {
   local node="${1:-${LAB_CLIENT_NODE}}"
   echo "==> Diagnostics on ${node}"
   run_in_node "${node}" "
-    echo '--- batctl if ---'
-    batctl -m bat0 if 2>/dev/null || batctl if 2>/dev/null || true
+    echo '--- batctl interface ---'
+    batctl meshif bat0 interface 2>/dev/null || true
     echo '--- ip link master bat0 ---'
     ip link show master bat0 2>/dev/null || echo 'no slaves on bat0'
     echo '--- batctl n ---'
-    batctl -m bat0 n 2>/dev/null || true
+    batctl meshif bat0 n 2>/dev/null || true
     echo '--- batctl o ---'
-    batctl -m bat0 o 2>/dev/null || true
+    batctl meshif bat0 o 2>/dev/null || true
     echo '--- ip addr ---'
     ip -4 addr show dev ${MESH_IFACE}
     ip -4 addr show dev bat0

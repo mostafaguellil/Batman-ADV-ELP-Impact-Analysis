@@ -81,9 +81,9 @@ Config : `scripts/lib.sh` (`NODE_COUNT=3`)
 
 ```bash
 ./scripts/debug_mesh.sh
-docker exec node1 bash -lc "batctl -m bat0 n"   # 2 voisins (MAC)
-docker exec node1 bash -lc "batctl -m bat0 o"   # 10.0.0.2 et 10.0.0.3
-docker exec node1 bash -lc "batctl -m bat0 ping -c 3 10.0.0.2"
+docker exec node1 bash -lc "batctl meshif bat0 n"   # 2 voisins (MAC)
+docker exec node1 bash -lc "batctl meshif bat0 o"   # 10.0.0.2 et 10.0.0.3
+docker exec node1 bash -lc "batctl meshif bat0 ping -c 3 10.0.0.2"
 ```
 
 Si `batctl n` est vide : vérifier `lsmod | grep batman_adv`, promiscuous mode VM, puis `docker compose down && ./scripts/start_lab.sh`.

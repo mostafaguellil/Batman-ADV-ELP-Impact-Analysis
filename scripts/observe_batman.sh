@@ -17,13 +17,13 @@ docker container inspect "${NODE}" >/dev/null 2>&1 || { echo "ERROR: ${NODE} not
 
 show_neighbors() {
   echo ">> batctl n (ELP neighbors)"
-  run_in_node "${NODE}" "batctl n" 2>/dev/null || true
+  run_in_node "${NODE}" "batctl meshif bat0 n" 2>/dev/null || true
   echo "count: $(count_neighbors "${NODE}")"
 }
 
 show_routes() {
   echo ">> batctl o (OGM routes)"
-  run_in_node "${NODE}" "batctl o" 2>/dev/null || true
+  run_in_node "${NODE}" "batctl meshif bat0 o" 2>/dev/null || true
   echo "count: $(count_originators "${NODE}")"
 }
 
@@ -45,7 +45,7 @@ case "${MODE}" in
   watch)
     while true; do clear; echo "=== ${NODE} $(date '+%T') ==="; show_neighbors; show_routes; sleep 3; done ;;
   all|*)
-    run_in_node "${NODE}" "batctl if; ip -4 addr show bat0" 2>/dev/null || true
+    run_in_node "${NODE}" "batctl meshif bat0 interface; ip -4 addr show bat0" 2>/dev/null || true
     show_neighbors; show_routes
     echo "elp_interval: $(read_batman_sysfs "${NODE}" elp_interval)"
     echo "ogm_interval: $(read_batman_sysfs "${NODE}" ogm_interval)"
