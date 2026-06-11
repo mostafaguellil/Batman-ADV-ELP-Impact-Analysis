@@ -193,7 +193,9 @@ mesh_reconnect_all() {
 mesh_reset_netem_all() {
   local node
   for node in "${MESH_NODES[@]}"; do
-    docker container inspect "${node}" >/dev/null 2>&1 && run_in_node "${node}" "tc qdisc del dev ${MESH_IFACE} root" || true
+    docker container inspect "${node}" >/dev/null 2>&1 \
+      && run_in_node "${node}" "tc qdisc show dev ${MESH_IFACE} 2>/dev/null | grep -q netem && tc qdisc del dev ${MESH_IFACE} root 2>/dev/null" \
+      || true
   done
 }
 
@@ -227,12 +229,17 @@ batman_pps() {
 }
 
 count_neighbors() {
-  # batctl n lists MAC addresses, not IPs
-  run_in_node "$1" "batctl meshif ${BATMESH_IF} n 2>/dev/null | grep -Ei '([0-9a-f]{2}:){5}[0-9a-f]{2}' | wc -l | tr -d ' '" || echo "0"
+  # One row per direct neighbor (MAC + last-seen), not every MAC on the line
+  run_in_node "$1" "batctl meshif ${BATMESH_IF} n 2>/dev/null \
+    | grep -E '^[[:space:]]*[^[:space:]]+[[:space:]]+([0-9a-f]{2}:){5}[0-9a-f]{2}' \
+    | wc -l | tr -d ' '" || echo "0"
 }
 
 count_originators() {
-  run_in_node "$1" "batctl meshif ${BATMESH_IF} o 2>/dev/null | grep -E '[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+' | wc -l | tr -d ' '" || echo "0"
+  # batctl o lists originator MACs (not 10.0.0.x IPs)
+  run_in_node "$1" "batctl meshif ${BATMESH_IF} o 2>/dev/null \
+    | grep -E '^[[:space:]]*([0-9a-f]{2}:){5}[0-9a-f]{2}' \
+    | wc -l | tr -d ' '" || echo "0"
 }
 
 read_batman_sysfs() {

@@ -54,14 +54,19 @@ Un nœud déconnecté/reconnecté à la fois ; métriques `during_disconnect` vs
 ### Métriques CSV
 `batman_packets`, `batman_pps`, `neighbors`, `originators`, `ping_avg_ms`, `throughput_mbps`
 
-## 6. Résultats (à remplir)
+## 6. Résultats
+
+Exemple typique (lab Docker/macvlan, 3 nœuds) :
 
 | Densité | PPS | Voisins | Latence (ms) | Débit (Mbit/s) |
 |---------|-----|---------|--------------|----------------|
-| 2 | | | | |
-| 3 | | | | |
+| 2 | ~3.6 | 1 | ~0.01 | ~8000 (L2 virtuel) |
+| 3 | ~8.1 | 2 | ~0.02 | ~8300 (L2 virtuel) |
 
-Fichiers : `results/density_*.csv`, `results/random_walk_*.csv`
+**Interprétation :** le trafic de contrôle BATMAN (`batman_pps`) **double environ** quand on passe de 2 à 3 nœuds actifs ; latence reste négligeable ; débit élevé car pas de radio.
+
+Fichiers : `results/density_*.csv`, `results/random_walk_*.csv`  
+Guide slides : **[PRESENTATION.md](PRESENTATION.md)**
 
 ## 7. Analyse
 

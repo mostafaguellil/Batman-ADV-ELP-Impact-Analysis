@@ -73,9 +73,10 @@ Config : `scripts/lib.sh` (`NODE_COUNT=3`)
 - Linux + module `batman-adv` chargé sur **l'hôte** (pas dans le conteneur)
 - Docker Compose
 
-## Rapport
+## Rapport & présentation
 
-**[docs/TRAVAIL.md](docs/TRAVAIL.md)**
+- **[docs/TRAVAIL.md](docs/TRAVAIL.md)** — rapport académique
+- **[docs/PRESENTATION.md](docs/PRESENTATION.md)** — interpréter les CSV pour la soutenance
 
 ## Dépannage ping « Destination Host Unreachable »
 
