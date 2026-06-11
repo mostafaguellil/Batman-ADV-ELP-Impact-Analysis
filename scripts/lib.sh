@@ -3,6 +3,7 @@
 
 NODE_COUNT=30
 MESH_PARALLEL_JOBS=10
+COMPOSE_UP_BATCH=6
 MESH_SUBNET_PREFIX="10.0.0"
 MESH_IFACE="eth0"
 BATMAN_ETHERTYPE="0x4305"
@@ -79,6 +80,67 @@ is_mesh_node() {
 require_docker() {
   command -v docker >/dev/null 2>&1 || { echo "ERROR: docker not found." >&2; exit 1; }
   docker info >/dev/null 2>&1 || { echo "ERROR: cannot connect to Docker daemon." >&2; exit 1; }
+}
+
+compose_reset_stack() {
+  echo "==> Stopping stack and cleaning stale manet networks"
+  docker compose down --remove-orphans 2>/dev/null || true
+  local id name
+  while IFS= read -r line; do
+    [[ -z "${line}" ]] && continue
+    id="${line%% *}"
+    name="${line#* }"
+    [[ "${name}" == *manet* ]] || continue
+    docker network rm "${id}" 2>/dev/null || true
+  done < <(docker network ls --format '{{.ID}} {{.Name}}' 2>/dev/null | grep -i manet || true)
+}
+
+compose_up_batched() {
+  local batch="${COMPOSE_UP_BATCH}" i j attempt svc=()
+  require_docker
+
+  for attempt in 1 2 3; do
+    echo "==> Starting ${NODE_COUNT} nodes on macvlan (batch=${batch}, attempt ${attempt})"
+    compose_reset_stack
+    [[ "$(uname -s)" == "Linux" ]] && ensure_manet_parent || true
+
+    echo "    step 1/2: node1 (create manet network)"
+    if ! docker compose up -d --no-build node1; then
+      sleep 2
+      continue
+    fi
+    sleep 2
+
+    echo "    step 2/2: remaining nodes in batches"
+    local ok=1
+    for ((i = 2; i <= NODE_COUNT; i += batch)); do
+      svc=()
+      for ((j = i; j < i + batch && j <= NODE_COUNT; j++)); do
+        svc+=("node${j}")
+      done
+      echo "       batch: ${svc[*]}"
+      if ! docker compose up -d --no-build "${svc[@]}"; then
+        ok=0
+        break
+      fi
+      sleep 1
+    done
+
+    if [[ "${ok}" -eq 1 ]]; then
+      local running
+      running="$(docker compose ps --status running -q 2>/dev/null | wc -l | tr -d ' ')"
+      if [[ "${running}" -ge "${NODE_COUNT}" ]]; then
+        echo "==> ${running}/${NODE_COUNT} containers running"
+        return 0
+      fi
+      echo "WARNING: only ${running}/${NODE_COUNT} containers up"
+    fi
+    sleep 3
+  done
+
+  echo "ERROR: failed to start all ${NODE_COUNT} containers (macvlan race or stale network)." >&2
+  echo "Hint: docker compose down && ./scripts/start_lab.sh" >&2
+  return 1
 }
 
 init_network() { MESH_NETWORK="$(resolve_mesh_network "${MESH_NODES[0]}")"; }

@@ -63,9 +63,8 @@ if [[ "${SKIP_COMPOSE}" -eq 0 ]]; then
     preflight_ubuntu_batman
   fi
   echo "==> Starting ${NODE_COUNT} containers"
-  docker compose down --remove-orphans 2>/dev/null || true
   docker compose build
-  docker compose up -d --remove-orphans
+  compose_up_batched
 else
   echo "==> Skipping docker compose (stack assumed already up)"
 fi
