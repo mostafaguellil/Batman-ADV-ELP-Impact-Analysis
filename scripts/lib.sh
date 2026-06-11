@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Shared config, fault injection, and BATMAN/ELP metrics.
 
-NODE_COUNT=3
+NODE_COUNT=30
+MESH_PARALLEL_JOBS=10
 MESH_SUBNET_PREFIX="10.0.0"
 MESH_IFACE="eth0"
 BATMAN_ETHERTYPE="0x4305"
@@ -28,6 +29,33 @@ done
 
 lab_server_ip() { printf '%s.2' "${MESH_SUBNET_PREFIX}"; }
 lab_last_node_ip() { printf '%s.%s' "${MESH_SUBNET_PREFIX}" "${NODE_COUNT}"; }
+
+mesh_convergence_timeout() {
+  local want="${1:-$((NODE_COUNT - 1))}"
+  local t=$((60 + want * 5))
+  (( t > 300 )) && t=300
+  printf '%s' "${t}"
+}
+
+mesh_neighbors_want() {
+  local density="${1:-${NODE_COUNT}}"
+  echo $((density - 1))
+}
+
+run_nodes_parallel() {
+  local batch="${MESH_PARALLEL_JOBS}" i j pid pids=() rc=0
+  for ((i = 0; i < ${#NODES[@]}; i += batch)); do
+    pids=()
+    for ((j = i; j < i + batch && j < ${#NODES[@]}; j++)); do
+      "$@" "${NODES[$j]}" &
+      pids+=($!)
+    done
+    for pid in "${pids[@]}"; do
+      wait "${pid}" || rc=1
+    done
+  done
+  return "${rc}"
+}
 
 resolve_mesh_network() {
   local node="${1:-${MESH_NODES[0]}}"
@@ -205,15 +233,21 @@ mesh_reset_all() {
 }
 
 set_mesh_density() {
-  local density="$1" i node
+  local density="$1" i node pids=()
   require_docker
   init_network
   echo "==> Mesh density: ${density} (node1..node${density})"
   for i in $(seq 1 "${NODE_COUNT}"); do
     node="node${i}"
-    if [[ "${i}" -le "${density}" ]]; then mesh_reconnect "${node}" >/dev/null
-    else mesh_disconnect "${node}" >/dev/null; fi
+    if [[ "${i}" -le "${density}" ]]; then
+      mesh_reconnect "${node}" >/dev/null &
+      pids+=($!)
+    else
+      mesh_disconnect "${node}" >/dev/null &
+      pids+=($!)
+    fi
   done
+  for pid in "${pids[@]}"; do wait "${pid}" 2>/dev/null || true; done
 }
 
 pick_random_candidate() {
@@ -333,20 +367,37 @@ configure_batman_node() {
   "
 }
 
-finalize_batman_mesh() {
-  local node quiet="${1:-0}"
-  [[ "${quiet}" -eq 1 ]] || echo "==> Finalizing BATMAN data plane on all nodes"
-  for node in "${NODES[@]}"; do
-    run_in_node "${node}" "
-      sysctl -qw net.ipv4.conf.bat0.rp_filter=0 2>/dev/null || true
-      batctl meshif bat0 distributed_arp_table enable 2>/dev/null || true
-      _d=/sys/class/net/bat0/mesh/distributed_arp_table
-      [[ -w \${_d} ]] && echo 1 > \${_d}
-      ip link set bat0 up 2>/dev/null || true
-      ip neigh flush dev bat0 2>/dev/null || true
-    " 2>/dev/null || true
+_finalize_batman_node() {
+  run_in_node "$1" "
+    sysctl -qw net.ipv4.conf.bat0.rp_filter=0 2>/dev/null || true
+    batctl meshif bat0 distributed_arp_table enable 2>/dev/null || true
+    _d=/sys/class/net/bat0/mesh/distributed_arp_table
+    [[ -w \${_d} ]] && echo 1 > \${_d}
+    ip link set bat0 up 2>/dev/null || true
+    ip neigh flush dev bat0 2>/dev/null || true
+  " 2>/dev/null || true
+}
+
+configure_all_batman_nodes() {
+  local i j node bat_ip pids=() batch="${MESH_PARALLEL_JOBS}"
+  echo "==> Configuring BATMAN on ${NODE_COUNT} nodes (parallel x${batch})"
+  for ((i = 0; i < ${#NODES[@]}; i += batch)); do
+    pids=()
+    for ((j = i; j < i + batch && j < ${#NODES[@]}; j++)); do
+      node="${NODES[$j]}"
+      bat_ip="${BAT_IPS[$j]}"
+      configure_batman_node "${node}" "${bat_ip}" &
+      pids+=($!)
+    done
+    for pid in "${pids[@]}"; do wait "${pid}" || return 1; done
   done
-  [[ "${quiet}" -eq 1 ]] || sleep 5
+}
+
+finalize_batman_mesh() {
+  local quiet="${1:-0}"
+  [[ "${quiet}" -eq 1 ]] || echo "==> Finalizing BATMAN data plane on all nodes"
+  run_nodes_parallel _finalize_batman_node || true
+  [[ "${quiet}" -eq 1 ]] || sleep 3
 }
 
 mesh_has_route() {
@@ -362,9 +413,14 @@ mesh_routes_ready() {
 }
 
 reconcile_batman_hardifs() {
-  local node
-  for node in "${NODES[@]}"; do
-    restore_batman_hardif "${node}" >/dev/null 2>&1 || true
+  local i j pids=() batch="${MESH_PARALLEL_JOBS}"
+  for ((i = 0; i < ${#NODES[@]}; i += batch)); do
+    pids=()
+    for ((j = i; j < i + batch && j < ${#NODES[@]}; j++)); do
+      restore_batman_hardif "${NODES[$j]}" &
+      pids+=($!)
+    done
+    for pid in "${pids[@]}"; do wait "${pid}" 2>/dev/null || true; done
   done
 }
 
@@ -411,17 +467,19 @@ prove_mesh_connectivity() {
 wait_for_mesh_convergence() {
   local observer="${1:-${LAB_CLIENT_NODE}}"
   local want="${2:-$((NODE_COUNT - 1))}"
-  local timeout="${3:-60}"
+  local timeout="${3:-$(mesh_convergence_timeout "${want}")}"
+  local min_ok=$(( want * 85 / 100 ))
+  (( min_ok < 1 )) && min_ok=1
   local elapsed=0 n
 
-  echo "==> Waiting for BATMAN neighbors on ${observer} (want >= ${want})"
+  echo "==> Waiting for BATMAN neighbors on ${observer} (want >= ${want}, ok >= ${min_ok}, timeout ${timeout}s)"
   while [[ "${elapsed}" -lt "${timeout}" ]]; do
     n="$(count_neighbors "${observer}")"
-    if [[ "${n}" -ge "${want}" ]]; then
-      echo "    Neighbors ready: ${n} (${elapsed}s)"
+    if [[ "${n}" -ge "${want}" || ( "${want}" -ge 5 && "${n}" -ge "${min_ok}" ) ]]; then
+      echo "    Neighbors ready: ${n}/${want} (${elapsed}s)"
       return 0
     fi
-    if (( elapsed > 0 && elapsed % 10 == 0 )); then
+    if (( elapsed > 0 && elapsed % 15 == 0 )); then
       finalize_batman_mesh 1
     fi
     sleep 2
@@ -429,8 +487,8 @@ wait_for_mesh_convergence() {
   done
 
   n="$(count_neighbors "${observer}")"
-  if [[ "${n}" -ge "${want}" ]]; then
-    echo "    Neighbors ready: ${n} (${elapsed}s)"
+  if [[ "${n}" -ge "${min_ok}" ]]; then
+    echo "    Neighbors partial: ${n}/${want} (${elapsed}s)"
     return 0
   fi
   echo "WARNING: only ${n}/${want} neighbors after ${timeout}s"

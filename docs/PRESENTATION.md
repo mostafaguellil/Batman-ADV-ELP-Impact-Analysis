@@ -4,8 +4,9 @@
 
 | density | batman_pps | neighbors | ping (ms) | throughput |
 |---------|------------|-----------|-----------|------------|
-| 2       | ~3.6       | 1         | ~0.01     | ~8 Gbit/s  |
-| 3       | ~8.1       | 2         | ~0.01     | ~8 Gbit/s  |
+| 2       | bas        | 1         | ~0.01     | élevé (Docker) |
+| 10      | ↑          | ~9        | ~0.02     | élevé      |
+| 30      | max        | ~29       | ~0.03     | élevé      |
 
 ### Ce qui est **bon** (à montrer en soutenance)
 

@@ -62,15 +62,10 @@ if [[ "${SKIP_COMPOSE}" -eq 0 ]]; then
   if [[ "$(uname -s)" == "Linux" ]]; then
     preflight_ubuntu_batman
   fi
-  echo "==> Starting containers"
-  for node in "${NODES[@]}"; do
-    if docker container inspect "${node}" >/dev/null 2>&1; then
-      echo "==> Removing stale container: ${node}"
-      docker rm -f "${node}" >/dev/null
-    fi
-  done
+  echo "==> Starting ${NODE_COUNT} containers"
+  docker compose down --remove-orphans 2>/dev/null || true
   docker compose build
-  docker compose up -d
+  docker compose up -d --remove-orphans
 else
   echo "==> Skipping docker compose (stack assumed already up)"
 fi
@@ -109,21 +104,14 @@ fi
 ensure_container_tools
 
 if [[ "${MODE}" == "batman" ]]; then
-  echo "==> Configuring BATMAN-Adv in each node (no IP on ${UNDERLAY_IF}, only bat0)"
-  for i in "${!NODES[@]}"; do
-    node="${NODES[$i]}"
-    bat_ip="${BAT_IPS[$i]}"
-    echo "    ${node} -> ${bat_ip}"
-    configure_batman_node "${node}" "${bat_ip}"
-  done
-
+  configure_all_batman_nodes
   finalize_batman_mesh
-  wait_for_mesh_convergence "${LAB_CLIENT_NODE}" $((NODE_COUNT - 1)) 60 || true
+  wait_for_mesh_convergence "${LAB_CLIENT_NODE}" $((NODE_COUNT - 1)) || true
 
-  echo "==> BATMAN interfaces"
-  for node in "${NODES[@]}"; do
+  echo "==> BATMAN interfaces (sample: node1, node$((NODE_COUNT / 2)), node${NODE_COUNT})"
+  for node in "node1" "node$((NODE_COUNT / 2))" "node${NODE_COUNT}"; do
     echo "--- ${node} ---"
-    docker exec "${node}" bash -lc "batctl meshif bat0 interface && ip -4 addr show ${UNDERLAY_IF} && ip -4 addr show bat0"
+    docker exec "${node}" bash -lc "batctl meshif bat0 interface && ip -4 addr show bat0" 2>/dev/null || true
   done
 else
   echo "==> Fallback mode enabled (no batman-adv module required)"

@@ -29,8 +29,8 @@ Applications → bat0 (10.0.0.x) → BATMAN-Adv (OGM + ELP) → eth0 (bridge Doc
 
 ## 4. Environnement de test
 
-- **3 nœuds** `node1`, `node2`, `node3` sur bridge `manet`
-- **Client** `node1`, **serveur iperf** `node2`, **churn** `node3`
+- **30 nœuds** `node1`…`node30` sur macvlan `manet0`
+- **Client** `node1`, **serveur iperf** `node2`, **churn** `node3`…`node30`
 - Module `batman-adv` chargé sur **l'hôte Linux** (`sudo modprobe batman-adv`)
 
 ### Installation
@@ -46,7 +46,7 @@ sudo modprobe batman-adv
 ## 5. Méthodologie
 
 ### Benchmark densité
-Pour N = 2 ou 3 nœuds actifs : convergence 20s, capture tcpdump 15s, ping, iperf3.
+Pour N = 2, 5, 10, 15, 20, 30 nœuds actifs : convergence auto, capture tcpdump 15s, ping, iperf3.
 
 ### Random walk
 Un nœud déconnecté/reconnecté à la fois ; métriques `during_disconnect` vs `after_reconnect`.

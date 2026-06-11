@@ -1,6 +1,6 @@
 # BATMAN-Adv ELP Impact Analysis
 
-Simulation MANET Docker (**3 nœuds**) pour analyser le trafic ELP/BATMAN et son impact sur débit et latence.
+Simulation MANET Docker (**30 nœuds**) pour analyser le trafic ELP/BATMAN et son impact sur débit et latence.
 
 ## Cloner le projet
 
@@ -28,6 +28,8 @@ Le lab utilise un réseau **macvlan** sur l'interface dummy `manet0` (L2 propre 
 
 **VMware / VirtualBox :** activer **Promiscuous Mode = Allow** sur la carte réseau de la VM.
 
+**30 nœuds :** prévoir **8 GB+ RAM** et **4+ CPU** ; premier `start_lab.sh` ~10–20 min (build + BATMAN parallèle x10).
+
 Sans BATMAN (connectivité Docker seulement) :
 
 ```bash
@@ -44,15 +46,15 @@ Sans BATMAN (connectivité Docker seulement) :
 
 | Script | Rôle |
 |--------|------|
-| `start_lab.sh` | Démarre 3 nœuds + configure BATMAN-Adv |
+| `start_lab.sh` | Démarre 30 nœuds + configure BATMAN-Adv (parallèle) |
 | `setup_batman.sh` | Setup manuel (`auto` / `batman` / `fallback`) |
 | `run_study.sh` | Benchmark densité + random walk + analyse |
-| `density_benchmark.sh` | Mesures par densité (2 ou 3 nœuds actifs) |
-| `random_walk.sh` | Churn sur `node3` + CSV |
+| `density_benchmark.sh` | Mesures par densité (2→30 nœuds actifs) |
+| `random_walk.sh` | Churn aléatoire `node3..node30` + CSV |
 | `observe_batman.sh` | `batctl n/o`, trafic `0x4305` |
 | `fault.sh` | Fautes manuelles (disconnect, netem) |
 
-Config : `scripts/lib.sh` (`NODE_COUNT=3`)
+Config : `scripts/lib.sh` (`NODE_COUNT=30`, `MESH_PARALLEL_JOBS=10`)
 
 ## Observer BATMAN
 
@@ -93,5 +95,5 @@ Si `batctl n` est vide : vérifier `lsmod | grep batman_adv`, promiscuous mode V
 
 ```bash
 docker compose down
-docker rm -f node1 node2 node3 2>/dev/null || true
+docker compose down --remove-orphans
 ```
