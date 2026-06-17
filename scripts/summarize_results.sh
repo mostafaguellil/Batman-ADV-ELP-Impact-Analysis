@@ -30,8 +30,19 @@ summarize_walk() {
   echo ""
   awk -F',' '
     NR==1{next}
-    {pps[$3]+=$5;c[$3]++; if($8>0)lat[$3]+=$8; if($10>0)thr[$3]+=$10}
-    END{for(p in c) printf("[%s] samples=%d pps=%.2f latency=%.2f throughput=%.2f\n",p,c[p],pps[p]/c[p],lat[p]/c[p],thr[p]/c[p])}' "${csv}"
+    {
+      pps[$3]+=$5; nbr[$3]+=$6; orig[$3]+=$7; c[$3]++
+      if ($9 != "NA" && $9+0 >= 0) loss[$3]+=$9
+      if ($8 != "NA" && $8+0 > 0) lat[$3]+=$8
+      if ($10 != "NA" && $10+0 > 0) thr[$3]+=$10
+    }
+    END {
+      for (p in c) {
+        printf("[%s] samples=%d pps=%.2f neighbors=%.1f originators=%.1f latency=%.2f loss%%=%.1f throughput=%.2f\n",
+          p, c[p], pps[p]/c[p], nbr[p]/c[p], orig[p]/c[p],
+          (lat[p] ? lat[p]/c[p] : 0), (loss[p] ? loss[p]/c[p] : 0), (thr[p] ? thr[p]/c[p] : 0))
+      }
+    }' "${csv}"
 }
 
 case "${MODE}" in

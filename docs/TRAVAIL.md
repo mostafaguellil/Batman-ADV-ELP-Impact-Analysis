@@ -49,7 +49,7 @@ sudo modprobe batman-adv
 Pour N = 2, 5, 10, 15, 20, 30 nœuds actifs : convergence auto, capture tcpdump 15s, ping, iperf3.
 
 ### Random walk
-Un nœud déconnecté/reconnecté à la fois ; métriques `during_disconnect` vs `after_reconnect`.
+Un nœud déconnecté/reconnecté à la fois (`node3`…`node30`) ; détache BATMAN avant coupure L2 ; attente convergence ELP ; métriques `during_disconnect` vs `after_reconnect`.
 
 ### Métriques CSV
 `batman_packets`, `batman_pps`, `neighbors`, `originators`, `ping_avg_ms`, `throughput_mbps`

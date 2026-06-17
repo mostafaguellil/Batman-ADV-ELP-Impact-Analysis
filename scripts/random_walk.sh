@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Random-walk disconnect/reconnect with ELP/BATMAN analysis.
+# Random-walk churn: one node disconnected/reconnected at a time with BATMAN metrics.
 # Usage: ./scripts/random_walk.sh [steps] [down_secs] [up_secs] [capture_secs]
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,6 +17,7 @@ LOG_DIR="${ROOT}/results"
 TS="$(date +%Y%m%d_%H%M%S)"
 OUT="${LOG_DIR}/random_walk_${TS}.log"
 CSV="${LOG_DIR}/random_walk_${TS}.csv"
+FULL_MESH_NEIGHBORS=$((NODE_COUNT - 1))
 
 mkdir -p "${LOG_DIR}"
 log() { echo "[$(date '+%F %T')] $*" | tee -a "${OUT}"; }
@@ -32,7 +33,7 @@ record() {
   echo "${step},${node},${phase},$(collect_mesh_snapshot "${LAB_CLIENT_NODE}" "${SERVER_IP}" "${CAPTURE_SECS}" 10 5)" >>"${CSV}"
 }
 
-cleanup() { mesh_reconnect_all; stop_iperf_server; }
+cleanup() { mesh_reconnect_all; reconcile_batman_hardifs; stop_iperf_server; }
 trap cleanup EXIT
 
 require_docker
@@ -40,25 +41,33 @@ init_network
 
 echo "step,node,phase,batman_packets,batman_pps,neighbors,originators,ping_avg_ms,ping_loss_pct,throughput_mbps" >"${CSV}"
 mesh_reset_all
-start_iperf_server; sleep 2
+reconcile_batman_hardifs
+start_iperf_server
+sleep 2
+
+log "=== baseline: full mesh (${NODE_COUNT} nodes) ==="
+wait_for_mesh_convergence "${LAB_CLIENT_NODE}" "${FULL_MESH_NEIGHBORS}" "$(mesh_convergence_timeout "${FULL_MESH_NEIGHBORS}")" \
+  >>"${OUT}" 2>&1 || true
+finalize_batman_mesh 1
 
 log_batman "baseline"
 record "0" "none" "baseline"
 
 last=""
 for step in $(seq 1 "${STEPS}"); do
-  node="$(pick_random_candidate)"
-  [[ "${node}" != "${last}" || ${#MESH_RANDOM_CANDIDATES[@]} -eq 1 ]] || node="$(pick_random_candidate)"
+  node="$(pick_random_candidate "${last}")"
 
   log "=== step ${step}: disconnect ${node} ==="
   mesh_disconnect "${node}"
-  sleep "${DOWN_SECS}"
+  want_drop="$(expected_neighbors_for_observer)"
+  wait_for_neighbor_drop "${LAB_CLIENT_NODE}" "${want_drop}" "${DOWN_SECS}" >>"${OUT}" 2>&1 || true
   log_batman "during_disconnect"
   record "${step}" "${node}" "during_disconnect"
 
   log "=== step ${step}: reconnect ${node} ==="
   mesh_reconnect "${node}"
-  sleep "${UP_SECS}"
+  wait_for_mesh_convergence "${LAB_CLIENT_NODE}" "${FULL_MESH_NEIGHBORS}" "${UP_SECS}" \
+    >>"${OUT}" 2>&1 || true
   log_batman "after_reconnect"
   record "${step}" "${node}" "after_reconnect"
   last="${node}"

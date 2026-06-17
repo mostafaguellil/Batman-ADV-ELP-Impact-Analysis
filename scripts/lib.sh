@@ -176,6 +176,29 @@ restore_batman_hardif() {
   "
 }
 
+detach_batman_hardif() {
+  run_in_node "$1" "
+    batctl meshif bat0 interface del ${MESH_IFACE} 2>/dev/null || true
+    ip link set dev ${MESH_IFACE} nomaster 2>/dev/null || true
+    ip link set ${MESH_IFACE} down 2>/dev/null || true
+  "
+}
+
+count_mesh_connected_nodes() {
+  local node n=0
+  for node in "${MESH_NODES[@]}"; do
+    docker container inspect "${node}" >/dev/null 2>&1 && node_on_mesh_network "${node}" && n=$((n + 1))
+  done
+  printf '%s' "${n}"
+}
+
+expected_neighbors_for_observer() {
+  local connected
+  connected="$(count_mesh_connected_nodes)"
+  (( connected > 0 )) || { printf '0'; return; }
+  printf '%s' $((connected - 1))
+}
+
 ensure_manet_parent() {
   [[ "$(uname -s)" == "Linux" ]] || return 0
   if ! ip link show "${MANET_PARENT_IF}" >/dev/null 2>&1; then
@@ -261,6 +284,7 @@ mesh_disconnect() {
   require_node "${node}"
   node_on_mesh_network "${node}" || return 0
   echo "==> Disconnect ${node} from ${MESH_NETWORK}"
+  detach_batman_hardif "${node}"
   docker network disconnect "${MESH_NETWORK}" "${node}"
 }
 
@@ -271,6 +295,7 @@ mesh_reconnect() {
   echo "==> Reconnect ${node} to ${MESH_NETWORK}"
   docker network connect "${MESH_NETWORK}" "${node}"
   restore_batman_hardif "${node}"
+  _finalize_batman_node "${node}"
 }
 
 mesh_reconnect_all() {
@@ -313,7 +338,14 @@ set_mesh_density() {
 }
 
 pick_random_candidate() {
-  printf '%s\n' "${MESH_RANDOM_CANDIDATES[@]}" | shuf | head -n 1
+  local exclude="${1:-}" candidates=() node
+  for node in "${MESH_RANDOM_CANDIDATES[@]}"; do
+    node_on_mesh_network "${node}" || continue
+    [[ -n "${exclude}" && "${node}" == "${exclude}" ]] && continue
+    candidates+=("${node}")
+  done
+  ((${#candidates[@]} == 0)) && candidates=("${MESH_RANDOM_CANDIDATES[@]}")
+  printf '%s\n' "${candidates[@]}" | shuf | head -n 1
 }
 
 count_batman_traffic() {
@@ -523,6 +555,28 @@ prove_mesh_connectivity() {
     fi
     sleep 2
   done
+  return 1
+}
+
+wait_for_neighbor_drop() {
+  local observer="${1:-${LAB_CLIENT_NODE}}"
+  local want="${2:-$((NODE_COUNT - 2))}"
+  local timeout="${3:-30}"
+  local elapsed=0 n
+
+  echo "==> Waiting for neighbor drop on ${observer} (want <= ${want}, timeout ${timeout}s)"
+  while [[ "${elapsed}" -lt "${timeout}" ]]; do
+    n="$(count_neighbors "${observer}")"
+    if [[ "${n}" -le "${want}" ]]; then
+      echo "    Neighbors dropped: ${n} (target <= ${want}) after ${elapsed}s"
+      return 0
+    fi
+    sleep 2
+    elapsed=$((elapsed + 2))
+  done
+
+  n="$(count_neighbors "${observer}")"
+  echo "WARNING: neighbors still ${n} (wanted <= ${want}) after ${timeout}s"
   return 1
 }
 
