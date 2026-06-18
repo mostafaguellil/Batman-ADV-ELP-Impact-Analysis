@@ -9,7 +9,7 @@ STEPS="${1:-20}"
 
 "${ROOT}/scripts/start_lab.sh"
 "${ROOT}/scripts/density_benchmark.sh" "2 5 10 15 20 30" 15
-"${ROOT}/scripts/randomwalk_mesh.sh" --real "${STEPS}" 10 10 5
+"${ROOT}/scripts/random_walk.sh" "${STEPS}" 10 10 5
 "${ROOT}/scripts/summarize_results.sh"
 
 echo ""

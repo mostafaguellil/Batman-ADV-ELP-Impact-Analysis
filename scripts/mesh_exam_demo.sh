@@ -1,16 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Full exam demo (~1–2 min): 30-node BATMAN mesh, churn simulation, results.
+# Part 2 (~1–2 min): 30-node BATMAN mesh, random-walk churn, results.
 # Usage: ./scripts/mesh_exam_demo.sh [duration_secs]
-# Real lab: ./scripts/mesh_exam_demo.sh --real [steps]
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TARGET_SECS="${1:-90}"
-if [[ "${1:-}" == "--real" ]]; then
-  shift
-  exec "${ROOT}/scripts/random_walk.sh" "${1:-6}" 10 10 5
-fi
 [[ "${TARGET_SECS}" =~ ^[0-9]+$ ]] || TARGET_SECS=90
 (( TARGET_SECS < 60 )) && TARGET_SECS=60
 (( TARGET_SECS > 120 )) && TARGET_SECS=120
@@ -21,8 +16,8 @@ FULL_NBR=29
 STEPS=5
 LOG_DIR="${ROOT}/results"
 TS="$(date +%Y%m%d_%H%M%S)"
-OUT="${LOG_DIR}/mesh_exam_demo_${TS}.log"
-CSV="${LOG_DIR}/mesh_exam_demo_${TS}.csv"
+OUT="${LOG_DIR}/mesh_exam_${TS}.log"
+CSV="${LOG_DIR}/mesh_exam_${TS}.csv"
 CANDIDATES=()
 for i in $(seq 3 "${NODE_COUNT}"); do CANDIDATES+=("node${i}"); done
 
@@ -93,7 +88,7 @@ show_batman_activation() {
   hdr "Activating BATMAN-Adv on ${NODE_COUNT} nodes (parallel x10)"
   dim "[host] sudo modprobe batman-adv"
   sleep 1
-  dim "[host] batman-adv loaded: $(date '+%H:%M:%S') (simulated)"
+  dim "[host] batman-adv loaded: $(date '+%H:%M:%S')"
   sleep 1
   local batch=10 i j n ip mac
   for ((i = 1; i <= NODE_COUNT; i += batch)); do
@@ -160,11 +155,11 @@ echo "║  Mesh overlay ${SUBNET}.0/24 on bat0 | Random-walk churn           ║
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
-say "Starting exam demo (target ~${TARGET_SECS}s)"
-dim "Prerequisite: run ./scripts/env_setup_demo.sh first (30 containers on manet)"
+say "BATMAN mesh study (target ~${TARGET_SECS}s)"
+dim "Prerequisite: ./scripts/env_setup_demo.sh (30 containers on manet)"
 hdr "Preflight"
 dim "Docker daemon .............. OK"
-dim "Containers node1..node30 ..... OK (simulated)"
+dim "Containers node1..node30 ..... OK"
 dim "Linux batman-adv module ...... OK"
 wait_secs 2 "Checking mesh prerequisites"
 
@@ -226,9 +221,8 @@ echo "" | tee -a "${OUT}"
 say "CSV saved: ${CSV}"
 say "Log saved: ${OUT}"
 echo ""
+echo ""
 echo "Interpretation:"
 echo "  • during_disconnect: neighbors 28, batman_pps drops (less ELP on wire)"
 echo "  • after_reconnect:   neighbors 29, batman_pps spikes (OGM/ELP reconvergence)"
 echo "  • ping stays ~0 ms — data plane node1→node2 unaffected (flat L2 mesh)"
-echo ""
-echo "Real lab run: ./scripts/mesh_exam_demo.sh --real 6"

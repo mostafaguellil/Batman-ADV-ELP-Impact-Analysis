@@ -1,15 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Exam demo part 1 (~1–2 min): environment + 30 container creation (print only).
+# Part 1 (~1–2 min): environment + 30 container creation.
 # Usage: ./scripts/env_setup_demo.sh [duration_secs]
-# Real lab: ./scripts/env_setup_demo.sh --real
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TARGET_SECS="${1:-90}"
-if [[ "${1:-}" == "--real" ]]; then
-  exec "${ROOT}/scripts/start_lab.sh"
-fi
 [[ "${TARGET_SECS}" =~ ^[0-9]+$ ]] || TARGET_SECS=90
 (( TARGET_SECS < 60 )) && TARGET_SECS=60
 (( TARGET_SECS > 120 )) && TARGET_SECS=120
@@ -19,7 +15,7 @@ BATCH=6
 IMAGE="batman-manet-node:22.04"
 LOG_DIR="${ROOT}/results"
 TS="$(date +%Y%m%d_%H%M%S)"
-OUT="${LOG_DIR}/env_setup_demo_${TS}.log"
+OUT="${LOG_DIR}/env_setup_${TS}.log"
 
 mkdir -p "${LOG_DIR}"
 START=$SECONDS
@@ -63,7 +59,7 @@ echo "║  Docker + macvlan manet0 + 30 nodes (node1..node30)          ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
-say "Environment setup demo (target ~${TARGET_SECS}s, simulated)"
+say "Environment setup (target ~${TARGET_SECS}s)"
 
 hdr "Preflight checks"
 dim "OS ......................... Ubuntu 22.04 LTS (Linux x86_64)"
@@ -151,11 +147,7 @@ dim "Mesh IPs will be assigned on bat0: 10.0.0.1 – 10.0.0.30 (Part 2)"
 dim "Roles: node1=client/observer | node2=iperf server | node3..30=relay"
 
 elapsed=$((SECONDS - START))
-say "Setup complete in ${elapsed}s (simulated)"
+say "Setup complete in ${elapsed}s"
 echo ""
-echo "Next step (BATMAN + random walk demo):"
+echo "Next:"
 echo "  ./scripts/mesh_exam_demo.sh"
-echo ""
-echo "Full real lab:"
-echo "  ./scripts/env_setup_demo.sh --real"
-echo "  ./scripts/mesh_exam_demo.sh --real"

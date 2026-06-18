@@ -36,24 +36,30 @@ Sans BATMAN (connectivité Docker seulement) :
 ./scripts/setup_batman.sh fallback --skip-compose
 ```
 
-Étude complète :
+Étude complète (lab réel Docker) :
 
 ```bash
 ./scripts/run_study.sh
+```
+
+Présentation / vidéo (2 scripts) :
+
+```bash
+./scripts/env_setup_demo.sh
+./scripts/mesh_exam_demo.sh
 ```
 
 ## Scripts
 
 | Script | Rôle |
 |--------|------|
+| `env_setup_demo.sh` | Part 1 : environnement + création 30 conteneurs |
+| `mesh_exam_demo.sh` | Part 2 : BATMAN + random walk + résultats |
 | `start_lab.sh` | Démarre 30 nœuds + configure BATMAN-Adv (parallèle) |
 | `setup_batman.sh` | Setup manuel (`auto` / `batman` / `fallback`) |
 | `run_study.sh` | Benchmark densité + random walk + analyse |
 | `density_benchmark.sh` | Mesures par densité (2→30 nœuds actifs) |
-| `env_setup_demo.sh` | **Démo examen part 1** : environnement + création 30 conteneurs (simulé) |
-| `mesh_exam_demo.sh` | **Démo examen part 2** : BATMAN + churn + résultats (~90s) |
-| `randomwalk_mesh.sh` | Alias vers `mesh_exam_demo.sh` (`--real` = vrai test) |
-| `random_walk.sh` | Churn aléatoire réel (1 nœud à la fois, convergence ELP) + CSV |
+| `random_walk.sh` | Churn aléatoire (1 nœud à la fois, convergence ELP) + CSV |
 | `observe_batman.sh` | `batctl n/o`, trafic `0x4305` |
 | `fault.sh` | Fautes manuelles (disconnect, netem) |
 
