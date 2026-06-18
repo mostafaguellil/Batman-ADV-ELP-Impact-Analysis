@@ -161,6 +161,7 @@ echo "╚═══════════════════════�
 echo ""
 
 say "Starting exam demo (target ~${TARGET_SECS}s)"
+dim "Prerequisite: run ./scripts/env_setup_demo.sh first (30 containers on manet)"
 hdr "Preflight"
 dim "Docker daemon .............. OK"
 dim "Containers node1..node30 ..... OK (simulated)"
