@@ -26,11 +26,29 @@ log_batman() {
   local label="$1"
   log "--- ${label} ---"
   run_in_node "${LAB_CLIENT_NODE}" "batctl meshif bat0 interface; batctl meshif bat0 n; batctl meshif bat0 o" >>"${OUT}" 2>&1 || true
+  log "  neighbors=$(count_neighbors "${LAB_CLIENT_NODE}") originators=$(count_originators "${LAB_CLIENT_NODE}")"
 }
 
 record() {
   local step="$1" node="$2" phase="$3"
-  echo "${step},${node},${phase},$(collect_mesh_snapshot "${LAB_CLIENT_NODE}" "${SERVER_IP}" "${CAPTURE_SECS}" 10 5)" >>"${CSV}"
+  local snap nbr pps
+  snap="$(collect_mesh_snapshot "${LAB_CLIENT_NODE}" "${SERVER_IP}" "${CAPTURE_SECS}" 10 5)"
+  nbr="$(echo "${snap}" | cut -d, -f3)"
+  pps="$(echo "${snap}" | cut -d, -f2)"
+  echo "${step},${node},${phase},${snap}" >>"${CSV}"
+  log "  record: step=${step} node=${node} phase=${phase} neighbors=${nbr} pps=${pps}"
+}
+
+preflight_random_walk() {
+  echo "==> Random walk preflight"
+  if ! docker container inspect "${LAB_CLIENT_NODE}" >/dev/null 2>&1; then
+    echo "ERROR: lab not running. Start with: ./scripts/start_lab.sh" >&2
+    exit 1
+  fi
+  if ! run_in_node "${LAB_CLIENT_NODE}" "ip link show bat0 >/dev/null 2>&1"; then
+    echo "ERROR: bat0 missing on ${LAB_CLIENT_NODE}. Run: ./scripts/setup_batman.sh" >&2
+    exit 1
+  fi
 }
 
 cleanup() { mesh_reconnect_all; reconcile_batman_hardifs; stop_iperf_server; }
@@ -38,6 +56,7 @@ trap cleanup EXIT
 
 require_docker
 init_network
+preflight_random_walk
 
 echo "step,node,phase,batman_packets,batman_pps,neighbors,originators,ping_avg_ms,ping_loss_pct,throughput_mbps" >"${CSV}"
 mesh_reset_all

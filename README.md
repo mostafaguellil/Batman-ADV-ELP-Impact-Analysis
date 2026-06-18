@@ -50,7 +50,9 @@ Sans BATMAN (connectivité Docker seulement) :
 | `setup_batman.sh` | Setup manuel (`auto` / `batman` / `fallback`) |
 | `run_study.sh` | Benchmark densité + random walk + analyse |
 | `density_benchmark.sh` | Mesures par densité (2→30 nœuds actifs) |
-| `random_walk.sh` | Churn aléatoire (1 nœud à la fois, convergence ELP) + CSV |
+| `mesh_exam_demo.sh` | **Démo examen ~90s** : 30 nœuds, BATMAN, churn simulé + résultats |
+| `randomwalk_mesh.sh` | Alias vers `mesh_exam_demo.sh` (`--real` = vrai test) |
+| `random_walk.sh` | Churn aléatoire réel (1 nœud à la fois, convergence ELP) + CSV |
 | `observe_batman.sh` | `batctl n/o`, trafic `0x4305` |
 | `fault.sh` | Fautes manuelles (disconnect, netem) |
 
